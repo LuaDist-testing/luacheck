@@ -42,9 +42,10 @@ local function new_value(var_node, value_node, is_init)
    }
 end
 
-local function new_label(line, name)
+local function new_label(line, name, location)
    return {
       name = name,
+      location = location,
       index = line.items.size + 1
    }
 end
@@ -66,35 +67,39 @@ local function new_eval_item(expr)
    return {
       tag = "Eval",
       expr = expr,
+      location = expr.location,
       accesses = {},
       used_values = {},
       lines = {}
    }
 end
 
-local function new_noop_item(location)
+local function new_noop_item(location, loop_end)
    return {
       tag = "Noop",
-      location = location
+      location = location,
+      loop_end = loop_end
    }
 end
 
-local function new_local_item(lhs, rhs)
+local function new_local_item(lhs, rhs, location)
    return {
       tag = "Local",
       lhs = lhs,
       rhs = rhs,
+      location = location,
       accesses = rhs and {},
       used_values = rhs and {},
       lines = rhs and {}
    }
 end
 
-local function new_set_item(lhs, rhs)
+local function new_set_item(lhs, rhs, location)
    return {
       tag = "Set",
       lhs = lhs,
       rhs = rhs,
+      location = location,
       accesses = {},
       used_values = {},
       lines = {}
@@ -136,8 +141,8 @@ function LinState:leave_scope()
       end
    end
 
-   for _, label in ipairs(left_scope.labels) do
-      if not label.used and not pseudo_labels[label.name] then
+   for name, label in pairs(left_scope.labels) do
+      if not label.used and not pseudo_labels[name] then
          self.chstate:warn_unused_label(label)
       end
    end
@@ -149,11 +154,15 @@ end
 
 function LinState:register_var(node, type_)
    local var = new_var(self.lines.top, node, type_)
-   local prev_var = self.scopes.top.vars[var.name]
+   local prev_var = self:resolve_var(var.name)
 
-   if prev_var then
-      self.chstate:warn_redefined(var, prev_var)
-      prev_var.scope_end = self.lines.top.items.size
+   if prev_var and prev_var.line == var.line then
+      local same_scope = self.scopes.top.vars[var.name]
+      self.chstate:warn_redefined(var, prev_var, same_scope)
+
+      if same_scope then
+         prev_var.scope_end = self.lines.top.items.size
+      end
    end
 
    self.scopes.top.vars[var.name] = var
@@ -167,26 +176,52 @@ function LinState:register_vars(nodes, type_)
    end
 end
 
-function LinState:resolve_var(node, action)
-   for i = self.scopes.size, 1, -1 do
-      local var = self.scopes[i].vars[node[1]]
+function LinState:resolve_var(name)
+   for _, scope in utils.ripairs(self.scopes) do
+      local var = scope.vars[name]
 
       if var then
-         node.var = var
          return var
       end
    end
-
-   self.chstate:warn_global(node, action, self.lines.size == 1)
 end
 
-function LinState:register_label(name)
+function LinState:check_var(node, action)
+   local var = self:resolve_var(node[1])
+
+   if not var then
+      self.chstate:warn_global(node, action, self.lines.size == 1)
+   else
+      node.var = var
+   end
+
+   return var
+end
+
+function LinState:register_label(name, location)
    if self.scopes.top.labels[name] then
       assert(not pseudo_labels[name])
       self.chstate:syntax_error()
    end
 
-   self.scopes.top.labels[name] = new_label(self.lines.top, name)
+   self.scopes.top.labels[name] = new_label(self.lines.top, name, location)
+end
+
+-- `node` is assignment node (`Local or `Set).
+function LinState:check_balance(node)
+   if node[2] then
+      if #node[1] < #node[2] then
+         self.chstate:warn_unbalanced(node.location, true)
+      elseif (#node[1] > #node[2]) and node.tag ~= "Local" and not is_unpacking(node[2][#node[2]]) then
+         self.chstate:warn_unbalanced(node.location)
+      end
+   end
+end
+
+function LinState:check_empty_block(block)
+   if #block == 0 then
+      self.chstate:warn_empty_block(block.location, block.tag == "Do")
+   end
 end
 
 function LinState:emit(item)
@@ -199,8 +234,8 @@ function LinState:emit_goto(name, is_conditional)
    table.insert(self.scopes.top.gotos, new_goto(name, jump))
 end
 
-function LinState:emit_noop(location)
-   self:emit(new_noop_item(location))
+function LinState:emit_noop(location, loop_end)
+   self:emit(new_noop_item(location, loop_end))
 end
 
 function LinState:emit_stmt(stmt)
@@ -220,25 +255,26 @@ function LinState:emit_block(block)
 end
 
 function LinState:emit_stmt_Do(node)
-   if #node == 0 then
-      self:emit_noop(node.location)
-   else
-      self:emit_block(node)
-   end
+   self:check_empty_block(node)
+   self:emit_noop(node.location)
+   self:emit_block(node)
 end
 
 function LinState:emit_stmt_While(node)
+   self:emit_noop(node.location)
    self:enter_scope()
    self:register_label("do")
    self:emit_expr(node[1])
    self:emit_goto("break", true)
    self:emit_block(node[2])
+   self:emit_noop(node.location, true)
    self:emit_goto("do")
    self:register_label("break")
    self:leave_scope()
 end
 
 function LinState:emit_stmt_Repeat(node)
+   self:emit_noop(node.location)
    self:enter_scope()
    self:register_label("do")
    self:enter_scope()
@@ -251,6 +287,7 @@ function LinState:emit_stmt_Repeat(node)
 end
 
 function LinState:emit_stmt_Fornum(node)
+   self:emit_noop(node.location)
    self:emit_expr(node[2])
    self:emit_expr(node[3])
 
@@ -266,12 +303,14 @@ function LinState:emit_stmt_Fornum(node)
    self:register_var(node[1], "loopi")
    self:emit_stmts(node[5] or node[4])
    self:leave_scope()
+   self:emit_noop(node.location, true)
    self:emit_goto("do")
    self:register_label("break")
    self:leave_scope()
 end
 
 function LinState:emit_stmt_Forin(node)
+   self:emit_noop(node.location)
    self:emit_exprs(node[2])
    self:enter_scope()
    self:register_label("do")
@@ -281,18 +320,21 @@ function LinState:emit_stmt_Forin(node)
    self:register_vars(node[1], "loop")
    self:emit_stmts(node[3])
    self:leave_scope()
+   self:emit_noop(node.location, true)
    self:emit_goto("do")
    self:register_label("break")
    self:leave_scope()
 end
 
 function LinState:emit_stmt_If(node)
+   self:emit_noop(node.location)
    self:enter_scope()
 
    for i = 1, #node - 1, 2 do
       self:enter_scope()
       self:emit_expr(node[i])
       self:emit_goto("else", true)
+      self:check_empty_block(node[i + 1])
       self:emit_block(node[i + 1])
       self:emit_goto("end")
       self:register_label("else")
@@ -300,6 +342,7 @@ function LinState:emit_stmt_If(node)
    end
 
    if #node % 2 == 1 then
+      self:check_empty_block(node[#node])
       self:emit_block(node[#node])
    end
 
@@ -308,7 +351,7 @@ function LinState:emit_stmt_If(node)
 end
 
 function LinState:emit_stmt_Label(node)
-   self:register_label(node[1])
+   self:register_label(node[1], node.location)
 end
 
 function LinState:emit_stmt_Goto(node)
@@ -321,6 +364,7 @@ function LinState:emit_stmt_Break(_)
 end
 
 function LinState:emit_stmt_Return(node)
+   self:emit_noop(node.location)
    self:emit_exprs(node)
    self:emit_goto("return")
 end
@@ -341,7 +385,8 @@ LinState.emit_stmt_Call = LinState.emit_expr
 LinState.emit_stmt_Invoke = LinState.emit_expr
 
 function LinState:emit_stmt_Local(node)
-   local item = new_local_item(node[1], node[2])
+   self:check_balance(node)
+   local item = new_local_item(node[1], node[2], node.location)
    self:emit(item)
 
    if node[2] then
@@ -352,25 +397,35 @@ function LinState:emit_stmt_Local(node)
 end
 
 function LinState:emit_stmt_Localrec(node)
-   local item = new_local_item({node[1]}, {node[2]})
+   local item = new_local_item({node[1]}, {node[2]}, node.location)
    self:register_var(node[1], "var")
    self:emit(item)
    self:scan_expr(item, node[2])
 end
 
 function LinState:emit_stmt_Set(node)
-   local item = new_set_item(node[1], node[2])
+   self:check_balance(node)
+   local item = new_set_item(node[1], node[2], node.location)
    self:scan_exprs(item, node[2])
 
    for _, expr in ipairs(node[1]) do
       if expr.tag == "Id" then
-         local var = self:resolve_var(expr, "set")
+         local var = self:check_var(expr, "set")
 
          if var then
             self:register_upvalue_action(item, var, "set")
          end
       else
-         self:scan_expr(item, expr)
+         assert(expr.tag == "Index")
+
+         if expr[1].tag == "Id" and not self:resolve_var(expr[1][1]) then
+            -- Warn about mutated global.
+            self:check_var(expr[1], "mutate")
+         else
+            self:scan_expr(item, expr[1])
+         end
+
+         self:scan_expr(item, expr[2])
       end
    end
 
@@ -395,20 +450,22 @@ end
 function LinState:register_upvalue_action(item, var, action)
    local key = (action == "set") and "set_upvalues" or "accessed_upvalues"
 
-   for i = self.lines.size, 1, -1 do
-      if self.lines[i] == var.line then
+   for _, line in utils.ripairs(self.lines) do
+      if line == var.line then
          break
       end
 
-      if not self.lines[i][key][var] then
-         self.lines[i][key][var] = {}
+      if not line[key][var] then
+         line[key][var] = {}
       end
 
-      table.insert(self.lines[i][key][var], item)
+      table.insert(line[key][var], item)
    end
 end
 
 function LinState:mark_access(item, node)
+   node.var.accessed = true
+
    if not item.accesses[node.var] then
       item.accesses[node.var] = {}
    end
@@ -418,13 +475,13 @@ function LinState:mark_access(item, node)
 end
 
 function LinState:scan_expr_Id(item, node)
-   if self:resolve_var(node, "access") then
+   if self:check_var(node, "access") then
       self:mark_access(item, node)
    end
 end
 
 function LinState:scan_expr_Dots(item, node)
-   local dots = self:resolve_var(node, "access")
+   local dots = self:check_var(node, "access")
 
    if not dots or dots.line ~= self.lines.top then
       self.chstate:syntax_error()
@@ -528,7 +585,7 @@ function LinState:scan_expr_Function(item, node)
 end
 
 -- Builds linear representation of AST and returns it.
--- Emits warnings: global, redefined, unused label.
+-- Emits warnings: global, redefined/shadowed, unused label, unbalanced assignment, empty block.
 local function linearize(chstate, ast)
    local linstate = LinState(chstate)
    local line = linstate:build_line({{tag = "Dots", "..."}}, ast)

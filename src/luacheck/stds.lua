@@ -3,7 +3,8 @@ local utils = require "luacheck.utils"
 local stds = {}
 
 stds.lua51 = {
-   "_G",
+   _G = true,
+   package = true,
    "_VERSION",
    "arg",
    "assert",
@@ -25,7 +26,6 @@ stds.lua51 = {
    "newproxy",
    "next",
    "os",
-   "package",
    "pairs",
    "pcall",
    "print",
@@ -46,8 +46,9 @@ stds.lua51 = {
 }
 
 stds.lua52 = {
-   "_ENV",
-   "_G",
+   _ENV = true,
+   _G = true,
+   package = true,
    "_VERSION",
    "arg",
    "assert",
@@ -65,7 +66,6 @@ stds.lua52 = {
    "math",
    "next",
    "os",
-   "package",
    "pairs",
    "pcall",
    "print",
@@ -85,8 +85,9 @@ stds.lua52 = {
 }
 
 stds.lua52c = {
-   "_ENV",
-   "_G",
+   _ENV = true,
+   _G = true,
+   package = true,
    "_VERSION",
    "arg",
    "assert",
@@ -106,7 +107,6 @@ stds.lua52c = {
    "module",
    "next",
    "os",
-   "package",
    "pairs",
    "pcall",
    "print",
@@ -126,8 +126,88 @@ stds.lua52c = {
    "xpcall"
 }
 
+stds.lua53 = {
+   _ENV = true,
+   _G = true,
+   package = true,
+   "_VERSION",
+   "arg",
+   "assert",
+   "collectgarbage",
+   "coroutine",
+   "debug",
+   "dofile",
+   "error",
+   "getmetatable",
+   "io",
+   "ipairs",
+   "load",
+   "loadfile",
+   "math",
+   "next",
+   "os",
+   "pairs",
+   "pcall",
+   "print",
+   "rawequal",
+   "rawget",
+   "rawlen",
+   "rawset",
+   "require",
+   "select",
+   "setmetatable",
+   "string",
+   "table",
+   "tonumber",
+   "tostring",
+   "type",
+   "utf8",
+   "xpcall"
+}
+
+stds.lua53c = {
+   _ENV = true,
+   _G = true,
+   package = true,
+   "_VERSION",
+   "arg",
+   "assert",
+   "bit32",
+   "collectgarbage",
+   "coroutine",
+   "debug",
+   "dofile",
+   "error",
+   "getmetatable",
+   "io",
+   "ipairs",
+   "load",
+   "loadfile",
+   "math",
+   "next",
+   "os",
+   "pairs",
+   "pcall",
+   "print",
+   "rawequal",
+   "rawget",
+   "rawlen",
+   "rawset",
+   "require",
+   "select",
+   "setmetatable",
+   "string",
+   "table",
+   "tonumber",
+   "tostring",
+   "type",
+   "utf8",
+   "xpcall"
+}
+
 stds.luajit = {
-   "_G",
+   _G = true,
+   package = true,
    "_VERSION",
    "arg",
    "assert",
@@ -151,7 +231,6 @@ stds.luajit = {
    "newproxy",
    "next",
    "os",
-   "package",
    "pairs",
    "pcall",
    "print",
@@ -171,7 +250,7 @@ stds.luajit = {
    "xpcall"
 }
 
-local min = {}
+local min = {_G = true, package = true}
 local std_sets = {}
 
 for name, std in pairs(stds) do
@@ -179,18 +258,25 @@ for name, std in pairs(stds) do
 end
 
 for global in pairs(std_sets.lua51) do
-   if std_sets.lua52[global] and std_sets.luajit[global] then
+   if std_sets.lua52[global] and std_sets.lua53[global] and std_sets.luajit[global] then
       table.insert(min, global)
    end
 end
 
 stds.min = min
-stds.max = utils.concat_arrays {stds.lua51, stds.lua52, stds.luajit}
+stds.max = utils.concat_arrays {stds.lua51, stds.lua52, stds.lua53, stds.luajit}
+stds.max._G = true
+stds.max._ENV = true
+stds.max.package = true
 
 stds._G = {}
 
 for global in pairs(_G) do
-   table.insert(stds._G, global)
+   if global == "_G" or global == "package" then
+      stds._G[global] = true
+   else
+      table.insert(stds._G, global)
+   end
 end
 
 local function has_env()
@@ -199,7 +285,7 @@ local function has_env()
 end
 
 if has_env() then
-   table.insert(stds._G, "_ENV")
+   stds._G._ENV = true
 end
 
 stds.none = {}

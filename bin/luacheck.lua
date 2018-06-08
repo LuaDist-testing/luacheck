@@ -1,5 +1,5 @@
-#!/bin/env lua
-local version = "0.7.3"
+#!/usr/bin/env lua
+local version = "0.8.0"
 
 local function fatal(msg)
    io.stderr:write("Fatal error: "..msg.."\n")
@@ -7,14 +7,17 @@ local function fatal(msg)
 end
 
 local function global_error_handler(err)
-   fatal(debug.traceback(
-      ("Luacheck %s bug (please report at github.com/mpeterv/luacheck/issues):\n%s"):format(version, err), 2))
+   if type(err) == "table" and err.pattern then
+      fatal("Invalid pattern '" .. err.pattern .. "'")
+   else
+      fatal(debug.traceback(
+         ("Luacheck %s bug (please report at github.com/mpeterv/luacheck/issues):\n%s"):format(version, err), 2))
+   end
 end
 
 local function main()
-   local argparse = require "argparse"
-
    local luacheck = require "luacheck"
+   local argparse = require "luacheck.argparse"
    local stds = require "luacheck.stds"
    local options = require "luacheck.options"
    local expand_rockspec = require "luacheck.expand_rockspec"
@@ -33,34 +36,47 @@ local function main()
          :argname "<file>"
 
       parser:flag "-g" "--no-global"
-         :description "Filter out warnings related to global variables. "
-      parser:flag "-r" "--no-redefined"
-         :description "Filter out warnings related to redefined variables. "
+         :description [[Filter out warnings related to global variables. 
+Equivalent to --ignore 1. ]]
       parser:flag "-u" "--no-unused"
-         :description "Filter out warnings related to unused variables. "
+         :description [[Filter out warnings related to unused variables and values. 
+Equivalent to --ignore [23]. ]]
+      parser:flag "-r" "--no-redefined"
+         :description [[Filter out warnings related to redefined variables. 
+Equivalent to --ignore 4. ]]
 
       parser:flag "-a" "--no-unused-args"
-         :description "Filter out warnings related to unused arguments and loop variables. "
+         :description [[Filter out warnings related to unused arguments and loop variables. 
+Equivalent to --ignore 21[23]. ]]
       parser:flag "-v" "--no-unused-values"
-         :description "Filter out warnings related to unused values. "
+         :description [[Filter out warnings related to unused values. 
+Equivalent to --ignore 31. ]]
+      parser:flag "--no-unset"
+         :description [[Filter out warnings related to unset variables. 
+Equivalent to --ignore 22. ]]
       parser:flag "-s" "--no-unused-secondaries"
          :description "Filter out warnings related to unused variables set together with used ones. "
-      parser:flag "--no-unset"
-         :description "Filter out warnings related to unset variables. "
 
       parser:option "--std"
          :description [[Set standard globals. <std> must be one of:
-      _G - globals of the current Lua interpreter(default); 
-      lua51 - globals of Lua 5.1; 
-      lua52 - globals of Lua 5.2; 
-      lua52c - globals of Lua 5.2 compiled with LUA_COMPAT_ALL; 
-      luajit - globals of LuaJIT 2.0; 
-      min - intersection of globals of Lua 5.1, Lua 5.2 and LuaJIT 2.0; 
-      max - union of globals of Lua 5.1, Lua 5.2 and LuaJIT 2.0; 
-      none - no standard globals. ]]
+   _G - globals of the current Lua interpreter(default); 
+   lua51 - globals of Lua 5.1; 
+   lua52 - globals of Lua 5.2; 
+   lua52c - globals of Lua 5.2 compiled with LUA_COMPAT_ALL; 
+   lua53 - globals of Lua 5.3; 
+   lua53c - globals of Lua 5.3 compiled with LUA_COMPAT_5_2; 
+   luajit - globals of LuaJIT 2.0; 
+   min - intersection of globals of Lua 5.1, Lua 5.2, Lua 5.3 and LuaJIT 2.0; 
+   max - union of globals of Lua 5.1, Lua 5.2, Lua 5.3 and LuaJIT 2.0; 
+   none - no standard globals. ]]
          :convert(stds)
       parser:option "--globals"
          :description "Add custom globals on top of standard ones. "
+         :args "*"
+         :count "*"
+         :argname "<global>"
+      parser:option "--read-globals"
+         :description "Add read-only globals. "
          :args "*"
          :count "*"
          :argname "<global>"
@@ -69,8 +85,13 @@ local function main()
          :args "*"
          :count "*"
          :argname "<global>"
+      parser:option "--new-read-globals"
+         :description "Set read-only globals. Removes read-only globals added previously. "
+         :args "*"
+         :count "*"
+         :argname "<global>"
       parser:flag "-c" "--compat"
-         :description "Equivalent to --std=max. "
+         :description "Equivalent to --std max. "
       parser:flag "-d" "--allow-defined"
          :description "Allow defining globals implicitly by setting them. "
       parser:flag "-t" "--allow-defined-top"
@@ -78,22 +99,32 @@ local function main()
       parser:flag "-m" "--module"
          :description "Limit visibility of implicitly defined globals to their files. "
       parser:flag "--no-unused-globals"
-         :description "Filter out warnings related to set but unused global variables. "
+         :description [[Filter out warnings related to set but unused global variables. 
+Equivalent to --ignore 13. ]]
 
-      parser:option "--ignore"
-         :description "Filter out warnings related to these variables. "
+      parser:option "--ignore" "-i"
+         :description [[Filter out warnings matching these patterns. 
+If a pattern contains slash, part before slash matches warning code
+   and part after it matches name of related variable.
+Otherwise, if the pattern contains letters or underscore,
+   it matches name of related variable.
+Otherwise, the pattern matches warning code.]]
          :args "+"
          :count "*"
-         :argname "<var>"
-      parser:option "--only"
-         :description "Filter out warnings not related to these variables. "
+         :argname "<patt>"
+      parser:option "--enable" "-e"
+         :description "Do not filter out warnings matching these patterns. "
          :args "+"
          :count "*"
-         :argname "<var>"
+         :argname "<patt>"
+      parser:option "--only" "-o"
+         :description "Filter out warnings not matching these patterns. "
+         :args "+"
+         :count "*"
+         :argname "<patt>"
 
       parser:option "-l" "--limit"
-         :description "Exit with 0 if there are <limit> or less warnings."
-         :default("0")
+         :description "Exit with 0 if there are <limit> or less warnings. (default: 0)"
          :convert(tonumber)
 
       local config_opt = parser:option "--config"
@@ -107,15 +138,16 @@ local function main()
       parser:flag "-q" "--quiet"
          :count "0-3"
          :description [[Suppress output for files without warnings. 
-      -qq: Suppress output of warnings. 
-      -qqq: Only print total number of warnings and errors. ]]
+   -qq: Suppress output of warnings. 
+   -qqq: Only print total number of warnings and errors. ]]
+
+      parser:flag "--codes"
+         :description "Show warning codes. "
 
       parser:flag "--no-color"
          :description "Do not color output"
 
-      local args = parser:parse()
-      args.color = not args.no_color
-      return args
+      return parser:parse()
    end
 
    -- Expands folders, rockspecs, -
@@ -132,15 +164,15 @@ local function main()
          if file == "-" then
             table.insert(res, io.stdin)
          elseif utils.is_dir(file) then
-            for _, file in ipairs(utils.extract_files(file, "%.lua$")) do
-               add(file)
+            for _, nested_file in ipairs(utils.extract_files(file, "%.lua$")) do
+               add(nested_file)
             end
          elseif file:sub(-#".rockspec") == ".rockspec" then
             local related_files, err = expand_rockspec(file)
 
             if related_files then
-               for _, file in ipairs(related_files) do
-                  add(file)
+               for _, related_file in ipairs(related_files) do
+                  add(related_file)
                end
             else
                add(file)
@@ -210,7 +242,8 @@ local function main()
          end
       end
 
-      for _, argname in ipairs {"globals", "new_globals", "ignore", "only"} do
+      for _, argname in ipairs {"globals", "read_globals", "new_globals", "new_read_globals",
+            "ignore", "enable", "only"} do
          if #args[argname] > 0 then
             res[argname] = utils.concat_arrays(args[argname])
          end
@@ -226,8 +259,8 @@ local function main()
 
       config_path = config_path or default_config
 
-      local function validate(opts)
-         local ok, invalid_field = options.validate(opts)
+      local function validate(option_set, opts)
+         local ok, invalid_field = options.validate(option_set, opts)
 
          if not ok then
             if invalid_field then
@@ -239,17 +272,33 @@ local function main()
          end
       end
 
-      validate(config)
+      validate(options.top_config_options, config)
       local res = {}
 
       for i, file in ipairs(files) do
-         local file_config = type(config.files) == "table" and rawget(config.files, file)
+         res[i] = {config}
 
-         if file_config then
-            validate(file_config)
+         if type(config.files) == "table" then
+            local overriding_paths = {}
+
+            for path in pairs(config.files) do
+               if file:sub(1, #path) == path then
+                  table.insert(overriding_paths, path)
+               end
+            end
+
+            -- Since all paths are prefixes of path, sorting by len is equivalent to regular sorting.
+            table.sort(overriding_paths)
+
+            -- Apply overrides from less specific (shorter prefixes) to more specific (longer prefixes).
+            for _, path in ipairs(overriding_paths) do
+               local overriding_config = config.files[path]
+               validate(options.config_options, overriding_config)
+               table.insert(res[i], overriding_config)
+            end
          end
 
-         res[i] = options.combine(config, file_config, opts)
+         table.insert(res[i], opts)
       end
 
       return res
@@ -274,8 +323,19 @@ local function main()
 
    local file_names, bad_rockspecs = expand_files(args.files)
    local files = remove_bad_rockspecs(file_names, bad_rockspecs)
-   local report = luacheck(files, combine_config_and_options(config, arg.config, opts, files))
+   local report = luacheck(files, combine_config_and_options(config, args.config, opts, files))
    insert_bad_rockspecs(report, file_names, bad_rockspecs)
+
+   -- Apply cli options from config.
+   if args.no_color then
+      args.color = false
+   else
+      args.color = not config or (config.color ~= false)
+   end
+
+   args.limit = args.limit or (config and config.limit or 0)
+   args.codes = args.codes or config and config.codes
+
    print(format(report, file_names, args))
 
    local exit_code

@@ -1,17 +1,8 @@
--- This file was automatically generated for the LuaDist project.
-
 package = "luacheck"
-version = "0.7.3-1"
--- LuaDist source
+version = "scm-8"
 source = {
-  tag = "0.7.3-1",
-  url = "git://github.com/LuaDist-testing/luacheck.git"
+   url = "git://github.com/mpeterv/luacheck.git"
 }
--- Original source
--- source = {
---    url = "git://github.com/mpeterv/luacheck.git",
---    tag = "0.7.3"
--- }
 description = {
    summary = "A simple static analyzer for Lua",
    detailed = [[
@@ -22,16 +13,16 @@ Luacheck is a tool for linting and static analysis of Lua code. It is able to sp
 }
 dependencies = {
    "lua >= 5.1, < 5.4",
-   "argparse >= 0.3.0",
-   "ansicolors >= 1.0-1",
    "luafilesystem >= 1.6.2"
 }
 build = {
    type = "builtin",
    modules = {
-      luacheck = "src/luacheck.lua",
+      luacheck = "src/luacheck/init.lua",
       ["luacheck.linearize"] = "src/luacheck/linearize.lua",
       ["luacheck.analyze"] = "src/luacheck/analyze.lua",
+      ["luacheck.reachability"] = "src/luacheck/reachability.lua",
+      ["luacheck.core_utils"] = "src/luacheck/core_utils.lua",
       ["luacheck.check"] = "src/luacheck/check.lua",
       ["luacheck.parser"] = "src/luacheck/parser.lua",
       ["luacheck.lexer"] = "src/luacheck/lexer.lua",
@@ -39,8 +30,9 @@ build = {
       ["luacheck.options"] = "src/luacheck/options.lua",
       ["luacheck.stds"] = "src/luacheck/stds.lua",
       ["luacheck.expand_rockspec"] = "src/luacheck/expand_rockspec.lua",
+      ["luacheck.format"] = "src/luacheck/format.lua",
       ["luacheck.utils"] = "src/luacheck/utils.lua",
-      ["luacheck.format"] = "src/luacheck/format.lua"
+      ["luacheck.argparse"] = "src/luacheck/argparse.lua"
    },
    install = {
       bin = {

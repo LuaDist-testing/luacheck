@@ -1,12 +1,10 @@
 local linearize = require "luacheck.linearize"
 local analyze = require "luacheck.analyze"
+local reachability = require "luacheck.reachability"
 local utils = require "luacheck.utils"
 
-local notes_top = {top = true}
-local notes_secondary = {secondary = true}
-
-local function get_notes_secondary(value)
-   return value.secondaries and value.secondaries.used and notes_secondary
+local function is_secondary(value)
+   return value.secondaries and value.secondaries.used
 end
 
 local ChState = utils.class()
@@ -23,11 +21,97 @@ function ChState:warn(warning)
    table.insert(self.warnings, warning)
 end
 
-function ChState:warn_redefined(var, prev_var)
+local action_codes = {
+   set = 1,
+   mutate = 2, -- NYI
+   access = 3
+}
+
+local type_codes = {
+   var = 1,
+   func = 1,
+   arg = 2,
+   vararg = 2,
+   loop = 3,
+   loopi = 3
+}
+
+function ChState:warn_global(node, action, is_top)
    self:warn({
-      type = "redefined",
-      subtype = "var",
-      vartype = prev_var.type,
+      code = "11" .. action_codes[action],
+      name = node[1],
+      line = node.location.line,
+      column = node.location.column,
+      top = is_top and (action == "set") or nil
+   })
+end
+
+-- W12* (read-only global) and W131 (unused global) are monkey-patched during filtering.
+
+function ChState:warn_unused_variable(var)
+   self:warn({
+      code = "21" .. type_codes[var.type],
+      name = var.name,
+      line = var.location.line,
+      column = var.location.column,
+      secondary = is_secondary(var.values[1]) or nil,
+      func = (var.values[1].type == "func") or nil,
+      vararg = (var.type == "vararg") or nil
+   })
+end
+
+function ChState:warn_unset(var)
+   self:warn({
+      code = "221",
+      name = var.name,
+      line = var.location.line,
+      column = var.location.column
+   })
+end
+
+function ChState:warn_unaccessed(var)
+   -- Mark as secondary if all assigned values are secondary.
+   -- It is guaranteed that there are at least two values.
+   local secondary = true
+
+   for _, value in ipairs(var.values) do
+      if not value.empty and not is_secondary(value) then
+         secondary = nil
+         break
+      end
+   end
+
+   self:warn({
+      code = "23" .. type_codes[var.type],
+      name = var.name,
+      line = var.location.line,
+      column = var.location.column,
+      secondary = secondary
+   })
+end
+
+function ChState:warn_unused_value(value)
+   self:warn({
+      code = "31" .. type_codes[value.type],
+      name = value.var.name,
+      line = value.location.line,
+      column = value.location.column,
+      secondary = is_secondary(value) or nil
+   })
+end
+
+function ChState:warn_uninit(node)
+   self:warn({
+      code = "321",
+      name = node[1],
+      line = node.location.line,
+      column = node.location.column
+   })
+end
+
+function ChState:warn_redefined(var, prev_var, same_scope)
+   self:warn({
+      code = "4" .. (same_scope and "1" or "2") .. type_codes[prev_var.type],
       name = var.name,
       line = var.location.line,
       column = var.location.column,
@@ -36,54 +120,36 @@ function ChState:warn_redefined(var, prev_var)
    })
 end
 
-function ChState:warn_global(node, action, is_top)
+function ChState:warn_unreachable(location, unrepeatable)
    self:warn({
-      type = "global",
-      subtype = action,
-      vartype = "global",
-      name = node[1],
-      line = node.location.line,
-      column = node.location.column,
-      notes = is_top and (action == "set") and notes_top or nil
+      code = "51" .. (unrepeatable and "2" or "1"),
+      line = location.line,
+      column = location.column
    })
 end
 
-function ChState.warn_unused_label(_)
-   -- NYI
-end
-
-function ChState:warn_unused_variable(var)
+function ChState:warn_unused_label(label)
    self:warn({
-      type = "unused",
-      subtype = "var",
-      vartype = var.type,
-      name = var.name,
-      line = var.location.line,
-      column = var.location.column,
-      notes = get_notes_secondary(var.values[1])
+      code = "521",
+      name = label.name,
+      line = label.location.line,
+      column = label.location.column
    })
 end
 
-function ChState:warn_unused_value(value)
+function ChState:warn_unbalanced(location, shorter_lhs)
    self:warn({
-      type = "unused",
-      subtype = "value",
-      vartype = value.type,
-      name = value.var.name,
-      line = value.location.line,
-      column = value.location.column,
-      notes = get_notes_secondary(value)
+      code = "53" .. (shorter_lhs and "1" or "2"),
+      line = location.line,
+      column = location.column
    })
 end
 
-function ChState:warn_unset(var)
+function ChState:warn_empty_block(location, do_end)
    self:warn({
-      type = "unused",
-      subtype = "unset",
-      vartype = "var",
-      name = var.name,
-      line = var.location.line,
-      column = var.location.column
+      code = "54" .. (do_end and "1" or "2"),
+      line = location.line,
+      column = location.column
    })
 end
 
@@ -103,6 +169,7 @@ local function check(ast)
    local chstate = ChState()
    local line = linearize(chstate, ast)
    analyze(chstate, line)
+   reachability(chstate, line)
    return chstate:get_report()
 end
 

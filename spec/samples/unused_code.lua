@@ -5,13 +5,14 @@ function foo.bar(baz)
       local q
 
       for a, b, c in pairs(foo) do
-         return 4
+         print(4)
       end
    end
 end
 
 local x = 5
 x = 6
+x = 7; print(x)
 
 local y = 5;
 (function() print(y) end)()

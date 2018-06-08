@@ -30,6 +30,10 @@ describe("parser", function()
       assert.same({}, get_ast(" "))
    end)
 
+   it("does not allow extra ending keywords", function()
+      assert.is_nil(parser("end"))
+   end)
+
    it("parses return statement correctly", function()
       assert.same({tag = "Return"}, get_node("return"))
       assert.same({tag = "Return",
@@ -844,7 +848,7 @@ end
                               {
                                  {tag = "If", location = {line = 7, column = 4, offset = 106},
                                     {tag = "Id", "arg", location = {line = 7, column = 7, offset = 109}},
-                                    {
+                                    {location = {line = 7, column = 11, offset = 113}, -- Branch location.
                                        {tag = "Call", location = {line = 8, column = 7, offset = 124},
                                           {tag = "Id", "print", location = {line = 8, column = 7, offset = 124}},
                                           {tag = "Id", "arg", location = {line = 8, column = 13, offset = 130}}
