@@ -1,8 +1,17 @@
+-- This file was automatically generated for the LuaDist project.
+
 package = "luacheck"
-version = "git-1"
+version = "0.2.0-1"
+-- LuaDist source
 source = {
-   url = "git://github.com/mpeterv/luacheck.git"
+  tag = "0.2.0-1",
+  url = "git://github.com/LuaDist-testing/luacheck.git"
 }
+-- Original source
+-- source = {
+--    url = "git://github.com/mpeterv/luacheck.git",
+--    tag = "0.2.0"
+-- }
 description = {
    summary = "A simple static analyzer",
    detailed = [[

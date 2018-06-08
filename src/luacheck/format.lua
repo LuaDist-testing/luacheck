@@ -1,17 +1,29 @@
 local color = require "ansicolors"
 
 local warnings = {
-   global = "accessing undefined variable %s",
-   redefined = "variable %s was previously defined in the same scope",
-   unused = "unused variable %s"
+   global = {
+      read = "accessing undefined variable %s",
+      write = "setting non-standard global variable %s"
+   },
+   redefined = {
+      var = "variable %s was previously defined in the same scope",
+      arg = "variable %s was previously defined as an argument in the same scope",
+      loop = "variable %s was previously defined as a loop variable in the same scope"
+   },
+   unused = {
+      var = "unused variable %s",
+      arg = "unused argument %s",
+      loop = "unused loop variable %s"
+   }
 }
 
-local function format_file_report(report)
+--- Formats a file report. 
+local function format(report)
    local label = "Checking "..report.file
    local status
 
    if report.error then
-      status = color "%{bright}Error"
+      status = color ("%{bright}"..report.error:sub(1, 1):upper()..report.error:sub(2).." error")
    elseif report.total == 0 then
       status = color "%{bright}%{green}OK"
    else
@@ -26,7 +38,7 @@ local function format_file_report(report)
       for i=1, report.total do
          local warning = report[i]
          local location = ("%s:%d:%d"):format(report.file, warning.line, warning.column)
-         local message = warnings[warning.type]:format(color("%{bright}"..warning.name))
+         local message = warnings[warning.type][warning.subtype]:format(color("%{bright}"..warning.name))
          table.insert(buf, ("    %s: %s"):format(location, message))
       end
 
@@ -36,34 +48,4 @@ local function format_file_report(report)
    return table.concat(buf, "\n")
 end
 
-local function plural(n)
-   if n == 1 then
-      return ""
-   end
-
-   return "s"
-end
-
---- Creates a formatted message from a report. 
-local function format_report(report)
-   local buf = {[0] = "\n"}
-
-   for i=1, #report do
-      table.insert(buf, format_file_report(report[i]))
-   end
-
-   local total = ("Total: %s warning%s / %s error%s"):format(
-      color("%{bright}"..tostring(report.total)), plural(report.total),
-      color("%{bright}"..tostring(report.errors)), plural(report.errors)
-   )
-
-   if buf[#buf]:sub(-1, -1) ~= "\n" then
-      table.insert(buf, "")
-   end
-
-   table.insert(buf, total)
-
-   return table.concat(buf, "\n")
-end
-
-return format_report
+return format

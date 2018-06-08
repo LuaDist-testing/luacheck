@@ -1,18 +1,4 @@
-local check = require "luacheck.check"
-local luacompiler = require "metalua.compiler"
-local luaparser = luacompiler.new()
-
-local function get_report(file, options)
-   local ok, ast = pcall(function() return luaparser:srcfile_to_ast(file) end)
-
-   if ok then
-      local report = check(ast, options)
-      report.file = file
-      return report
-   else
-      return {error = true, file = file}
-   end
-end
+local get_report = require "luacheck.get_report"
 
 --- Checks files with given options. 
 -- `files` should be an array of paths or a single path. 
@@ -31,14 +17,15 @@ end
 -- A file report is an array of warnings. Its `total` field contains total number of warnings. 
 -- `global`, `redefined` and `unused` fields contain number of warnings of corresponding types. 
 -- `file` field contains file name. 
--- If there was an error during checking the file, field `error` will contain true. 
+-- If there was an error during checking the file, field `error` will contain "I/O" or "syntax". 
 -- And other fields except `file` will be absent. 
 --
 -- Warning is a table with several fields. 
 -- `type` field may contain "global", "redefined" or "unused". 
 -- "global" is for accessing non-standard globals. 
 -- "redefined" is for redefinition of a local in the same scope, e.g. `local a; local a`. 
--- "unused" is for unused locals.
+-- "unused" is for unused locals. 
+-- `subtype` field may contain "read" or "write" for `global` type and "loop" or "arg" or "var" for other types. 
 -- `name` field contains the name of problematic variable. 
 -- `line` field contains line number where the problem occured. 
 -- `column` field contains offest of the name in that line. 
