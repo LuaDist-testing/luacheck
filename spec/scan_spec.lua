@@ -1,8 +1,8 @@
 local scan = require "luacheck.scan"
-local parser = require "metalua.compiler".new()
+local parse = require "luacheck.parser"
 
 local function get_calls(source)
-   local ast = assert(parser:src_to_ast(source))
+   local ast = assert(parse(source))
 
    local result = {}
    local callbacks = {
@@ -28,7 +28,7 @@ local function get_calls(source)
 end
 
 
-describe("test luacheck.scan", function()
+describe("scan", function()
    it("considers empty source an empty block", function()
       assert.same({
          "START";
@@ -49,12 +49,19 @@ describe("test luacheck.scan", function()
          "VAR z";
          "VAR c";
          "INIT z";
-         "INIT c";
+         --
+         "ACCESS f";
+         "VAR d";
+         "VAR b";
+         "INIT d";
+         "INIT b";
+         --
          "END";
       }, get_calls[[
          local a = 5
          local b, c
          local z, c = true
+         local d, b = f()
       ]])
    end)
 
