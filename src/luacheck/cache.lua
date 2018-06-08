@@ -9,13 +9,13 @@ local cache = {}
 -- third is check result in lua table format.
 -- String fields are compressed into array indexes.
 
-cache.format_version = 4
+cache.format_version = 7
 
 local fields = {
    "code", "name", "line", "column", "end_column", "prev_line", "prev_column", "secondary",
    "self", "func", "filtered", "top", "read_only", "global", "filtered_111", "filtered_121",
    "filtered_131", "filtered_112", "filtered_122", "filtered_113", "definition", "in_module",
-   "msg", "index", "recursive", "mutually_recursive"
+   "msg", "index", "recursive", "mutually_recursive", "useless"
 }
 
 -- Converts table with fields into table with indexes.
@@ -184,7 +184,9 @@ local function load_cached(cached)
 end
 
 local function check_version_header(fh)
-   return fh:read() == "" and tonumber(fh:read()) == cache.format_version
+   local first_line = fh:read()
+
+   return (first_line == "" or first_line == "\r") and tonumber(fh:read()) == cache.format_version
 end
 
 local function write_version_header(fh)
@@ -215,6 +217,10 @@ function cache.load(cache_filename, filenames, mtimes)
       if not filename then
          fh:close()
          return result
+      end
+
+      if filename:sub(-1) == "\r" then
+         filename = filename:sub(1, -2)
       end
 
       local mtime = fh:read()

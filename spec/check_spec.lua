@@ -81,6 +81,29 @@ end
       ]])
    end)
 
+   it("detects useless local _ variable", function()
+      assert.same({
+         {code = "211", name = "_", useless = true, line = 2, column = 10, end_column = 10},
+         {code = "211", name = "_", useless = true, line = 7, column = 13, end_column = 13},
+         {code = "211", name = "_", filtered = true, secondary = true, line = 12, column = 13, end_column = 13}
+      }, check[[
+do
+   local _
+end
+
+do
+   local a = 5
+   local b, _ = a
+   b()
+end
+
+do
+   local c, _ = ...
+   c()
+end
+      ]])
+   end)
+
    it("reports unused function with forward declaration as variable, not value", function()
       assert.same({
          {code = "211", name = "noop", func = true, line = 1, column = 22, end_column = 25}
@@ -163,6 +186,7 @@ local a = {}
 function a:b()
    
 end
+return a
       ]])
    end)
 
@@ -268,6 +292,66 @@ end
       ]])
    end)
 
+   it("detects variable that is mutated but never accessed", function()
+      assert.same({
+         {code = "241", name = "a", line = 1, column = 7, end_column = 7}
+      }, check[[
+local a = {}
+a.k = 1
+      ]])
+
+      assert.same({
+         {code = "241", name = "a", line = 1, column = 7, end_column = 7}
+      }, check[[
+local a
+
+if ... then
+   a = {}
+   a.k1 = 1
+else
+   a = {}
+   a.k2 = 2
+end
+      ]])
+
+      assert.same({
+         {code = "241", name = "a", line = 1, column = 7, end_column = 7},
+         {code = "311", name = "a", line = 7, column = 4, end_column = 4}
+      }, check[[
+local a
+
+if ... then
+   a = {}
+   a.k1 = 1
+else
+   a = {}
+end
+      ]])
+   end)
+
+   it("detects values that are mutated but never accessed", function()
+      assert.same({
+         {code = "331", name = "a", line = 5, column = 4, end_column = 4}
+      }, check[[
+local a
+local b = (...).k
+
+if (...)[1] then
+   a = {}
+   a.k1 = 1
+elseif (...)[2] then
+   a = b
+   a.k2 = 2
+elseif (...)[3] then
+   a = b()
+   a.k3 = 3
+else
+   a = {}
+   return a
+end
+      ]])
+   end)
+
    it("detects duplicated fields in table literals", function()
       assert.same({
          {code = "314", name = "key", line = 3, column = 4, end_column = 4},
@@ -369,39 +453,45 @@ end
 
    it("marks redefinition of implicit self", function()
       assert.same({
-         {code = "112", name = "t", line = 1, column = 10, end_column = 10},
-         {code = "212", name = "self", line = 1, column = 11, end_column = 11, self = true},
-         {code = "212", name = "self", line = 3, column = 14, end_column = 14, self = true},
-         {code = "432", name = "self", line = 3, column = 14, end_column = 14, self = true, prev_line = 1, prev_column = 11}
+         {code = "212", name = "self", line = 2, column = 11, end_column = 11, self = true},
+         {code = "212", name = "self", line = 4, column = 14, end_column = 14, self = true},
+         {code = "432", name = "self", line = 4, column = 14, end_column = 14, self = true, prev_line = 2, prev_column = 11}
       }, check[[
+local t = {}
 function t:f()
    local o = {}
    function o:g() end
+   return o
 end
+return t
       ]])
 
       assert.same({
-         {code = "112", name = "t", line = 1, column = 10, end_column = 10},
-         {code = "212", name = "self", line = 1, column = 14, end_column = 17},
-         {code = "212", name = "self", line = 3, column = 14, end_column = 14, self = true},
-         {code = "432", name = "self", line = 3, column = 14, end_column = 14, prev_line = 1, prev_column = 14}
+         {code = "212", name = "self", line = 2, column = 14, end_column = 17},
+         {code = "212", name = "self", line = 4, column = 14, end_column = 14, self = true},
+         {code = "432", name = "self", line = 4, column = 14, end_column = 14, prev_line = 2, prev_column = 14}
       }, check[[
+local t = {}
 function t.f(self)
    local o = {}
    function o:g() end
+   return o
 end
+return t
       ]])
 
       assert.same({
-         {code = "112", name = "t", line = 1, column = 10, end_column = 10},
-         {code = "212", name = "self", line = 1, column = 11, end_column = 11, self = true},
-         {code = "212", name = "self", line = 3, column = 17, end_column = 20},
-         {code = "432", name = "self", line = 3, column = 17, end_column = 20, prev_line = 1, prev_column = 11}
+         {code = "212", name = "self", line = 2, column = 11, end_column = 11, self = true},
+         {code = "212", name = "self", line = 4, column = 17, end_column = 20},
+         {code = "432", name = "self", line = 4, column = 17, end_column = 20, prev_line = 2, prev_column = 11}
       }, check[[
+local t = {}
 function t:f()
    local o = {}
    function o.g(self) end
+   return o
 end
+return t
       ]])
    end)
 
@@ -554,6 +644,23 @@ return a
       ]])
    end)
 
+   it("detects mutating uninitialized variables", function()
+      assert.same({
+         {code = "341", name = "a", line = 4, column = 4, end_column = 4},
+         {code = "113", name = "get", line = 6, column = 8, end_column = 10}
+      }, check[[
+local a
+
+if ... then
+   a.k = 5
+else
+   a = get(5)
+end
+
+return a
+      ]])
+   end)
+
    it("detects accessing uninitialized variables in nested functions", function()
       assert.same({
          {code = "113", name = "get", line = 7, column = 8, end_column = 10},
@@ -645,6 +752,19 @@ end
 
 ::fail::
 return foo;
+      ]])
+   end)
+
+   it("marks ignored warnings as filtered", function()
+      assert.same({
+         {code = "211", name = "foo", filtered = true, line = 1, column = 7, end_column = 9},
+         {code = "211", name = "bar", line = 1, column = 12, end_column = 14},
+         {code = "512", filtered = true, line = 2, column = 1, end_column = 3},
+         {code = "213", name = "_", filtered = true, line = 2, column = 5, end_column = 5},
+         {code = "113", name = "pairs", filtered_113 = true, line = 2, column = 10, end_column = 14},
+      }, check[[
+local foo, bar -- luacheck: ignore foo
+for _ in pairs({}) do return end -- luacheck: ignore
       ]])
    end)
 

@@ -3,9 +3,21 @@ local multithreading = require "luacheck.multithreading"
 local helper = require "spec.helper"
 local luacheck_cmd = helper.luacheck_command()
 
+local function quote(argument)
+   -- Do not worry about special characters too much, just quote.
+   local mark = utils.is_windows and '"' or "'"
+   return mark .. argument .. mark
+end
+
+local function norm_output(output)
+   -- Replace "/" with native slashes, except when it's used to separate
+   -- warning and error numbers on the last line.
+   return output:gsub("(%w)/(%w)", "%1" .. utils.dir_sep .. "%2")
+end
+
 local function get_output(command, wd, color)
    if color then
-      if package.config:sub(1, 1) == "\\" and not os.getenv("ANSICON") then
+      if utils.is_windows and not os.getenv("ANSICON") then
          pending("uses terminal colors")
       end
    else
@@ -74,7 +86,7 @@ Total: 0 warnings / 0 errors in 1 file
 Checking spec/samples/good_code.lua               OK
 
 Total: 0 warnings / 0 errors in 1 file
-]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --no-config --exclude-files '**/??d_code.lua'")
+]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua --no-config --exclude-files " .. quote("**/??d_code.lua")))
    end)
 
    it("filters files using --include-files", function()
@@ -82,7 +94,7 @@ Total: 0 warnings / 0 errors in 1 file
 Checking spec/samples/bad_code.lua                5 warnings
 
 Total: 5 warnings / 0 errors in 1 file
-]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --no-config --include-files '**/??d_code.lua' -qq")
+]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua --no-config -qq --include-files " .. quote("**/??d_code.lua")))
    end)
 
    it("--exclude-files has priority over --include-files", function()
@@ -90,7 +102,7 @@ Total: 5 warnings / 0 errors in 1 file
 Checking spec/samples/good_code.lua               OK
 
 Total: 0 warnings / 0 errors in 1 file
-]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --no-config --include-files '**/*.lua' --exclude-files '**/??d_code.lua'")
+]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua --no-config --include-files " .. quote("**/*.lua") .. " --exclude-files " .. quote("**/??d_code.lua")))
    end)
 
    it("works for incorrect files", function()
@@ -234,7 +246,7 @@ Total: 4 warnings / 0 errors in 1 file
       assert.equal([[
 Checking spec/samples/bad_code.lua                6 warnings
 
-    spec/samples/bad_code.lua:1:1: accessing undefined variable 'package'
+    spec/samples/bad_code.lua:1:1: mutating non-standard global variable 'package'
     spec/samples/bad_code.lua:3:16: unused function 'helper'
     spec/samples/bad_code.lua:3:23: unused variable length argument
     spec/samples/bad_code.lua:7:10: setting non-standard global variable 'embrace'
@@ -681,6 +693,11 @@ Total: 26 warnings / 0 errors in 1 file
 
       before_each(function()
          tmpname = os.tmpname()
+
+         -- Work around os.tmpname being broken on Windows sometimes.
+         if utils.is_windows and not tmpname:find(':') then
+            tmpname = os.getenv("TEMP") .. tmpname
+         end
       end)
 
       after_each(function()
@@ -750,7 +767,7 @@ spec/samples/good_code.lua
 return {}
 spec/samples/bad_code.lua
 (%d+)
-local A="113";return {{A,"package",1,1,7},{"211","helper",3,16,21,%[10%]=true},{"212","...",3,23,25},{"111","embrace",7,10,16,%[12%]=true},{"412","opt",8,10,12,7,18},{A,"hepler",9,11,16}}
+return {{"112","package",1,1,7},{"211","helper",3,16,21,%[10%]=true},{"212","...",3,23,25},{"111","embrace",7,10,16,%[12%]=true},{"412","opt",8,10,12,7,18},{"113","hepler",9,11,16}}
 spec/samples/python_code.lua
 (%d+)
 return {{"011",%[3%]=1,%[4%]=6,%[5%]=15,%[23%]="expected '=' near '__future__'"}}
@@ -765,7 +782,7 @@ return {{"011",%[3%]=1,%[4%]=6,%[5%]=15,%[23%]="expected '=' near '__future__'"}
          assert.equal(normal_output, get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --no-config --cache "..tmpname))
 
          local function write_new_cache(version)
-            local fh = io.open(tmpname, "w")
+            local fh = io.open(tmpname, "wb")
             assert.userdata(fh)
             fh:write(([[
 %s
@@ -922,13 +939,13 @@ spec/samples/python_code.lua:1:6: (E011) expected '=' near '__future__'
 
    it("uses --include-files when expanding folders", function()
       assert.matches("^Total: %d+ warnings / %d+ errors in 2 files\n$",
-         get_output "spec/samples -qqq --no-config --include-files '**/*.rockspec'")
+         get_output("spec/samples -qqq --no-config --include-files " .. quote("**/*.rockspec")))
    end)
 
    describe("config", function()
       describe("loading", function()
          it("uses .luacheckrc in current directory if possible", function()
-            assert.equal([[
+            assert.equal(norm_output [[
 Checking nested/ab.lua                            1 warning
 
     nested/ab.lua:1:10: accessing undefined variable 'b'
@@ -943,7 +960,7 @@ Total: 3 warnings / 0 errors in 2 files
          end)
 
          it("does not use .luacheckrc in current directory with --no-config", function()
-            assert.equal([[
+            assert.equal(norm_output [[
 Checking nested/ab.lua                            2 warnings
 
     nested/ab.lua:1:7: accessing undefined variable 'a'
@@ -960,7 +977,7 @@ Total: 5 warnings / 0 errors in 2 files
          end)
 
          it("uses .luacheckrc in upper directory", function()
-            assert.equal([[
+            assert.equal(norm_output [[
 Checking ab.lua                                   1 warning
 
     ab.lua:1:10: accessing undefined variable 'b'
@@ -1113,7 +1130,7 @@ Checking unused_code.lua                          9 warnings
 Checking unused_secondaries.lua                   4 warnings
 
 Total: 45 warnings / 4 errors in 12 files
-]], get_output(". --config=spec/configs/exclude_files_config.luacheckrc -qq --exclude-files './read*'", "spec/samples/"))
+]], get_output(". --config=spec/configs/exclude_files_config.luacheckrc -qq --exclude-files " .. quote("./read*"), "spec/samples/"))
          end)
 
          it("allows defining custom stds", function()

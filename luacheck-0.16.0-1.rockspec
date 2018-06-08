@@ -1,16 +1,16 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luacheck"
-version = "0.15.1-1"
+version = "0.16.0-1"
 -- LuaDist source
 source = {
-  tag = "0.15.1-1",
+  tag = "0.16.0-1",
   url = "git://github.com/LuaDist-testing/luacheck.git"
 }
 -- Original source
 -- source = {
---    url = "git://github.com/mpeterv/luacheck",
---    tag = "0.15.1"
+--    url = "git+https://github.com/mpeterv/luacheck.git",
+--    tag = "0.16.0"
 -- }
 description = {
    summary = "A static analyzer and a linter for Lua",
@@ -28,28 +28,28 @@ build = {
    type = "builtin",
    modules = {
       luacheck = "src/luacheck/init.lua",
-      ["luacheck.main"] = "src/luacheck/main.lua",
-      ["luacheck.config"] = "src/luacheck/config.lua",
-      ["luacheck.linearize"] = "src/luacheck/linearize.lua",
       ["luacheck.analyze"] = "src/luacheck/analyze.lua",
-      ["luacheck.reachability"] = "src/luacheck/reachability.lua",
-      ["luacheck.core_utils"] = "src/luacheck/core_utils.lua",
-      ["luacheck.check"] = "src/luacheck/check.lua",
-      ["luacheck.parser"] = "src/luacheck/parser.lua",
-      ["luacheck.lexer"] = "src/luacheck/lexer.lua",
-      ["luacheck.filter"] = "src/luacheck/filter.lua",
-      ["luacheck.options"] = "src/luacheck/options.lua",
-      ["luacheck.inline_options"] = "src/luacheck/inline_options.lua",
-      ["luacheck.stds"] = "src/luacheck/stds.lua",
-      ["luacheck.expand_rockspec"] = "src/luacheck/expand_rockspec.lua",
-      ["luacheck.multithreading"] = "src/luacheck/multithreading.lua",
+      ["luacheck.argparse"] = "src/luacheck/argparse.lua",
       ["luacheck.cache"] = "src/luacheck/cache.lua",
+      ["luacheck.check"] = "src/luacheck/check.lua",
+      ["luacheck.config"] = "src/luacheck/config.lua",
+      ["luacheck.core_utils"] = "src/luacheck/core_utils.lua",
+      ["luacheck.expand_rockspec"] = "src/luacheck/expand_rockspec.lua",
+      ["luacheck.filter"] = "src/luacheck/filter.lua",
       ["luacheck.format"] = "src/luacheck/format.lua",
-      ["luacheck.version"] = "src/luacheck/version.lua",
       ["luacheck.fs"] = "src/luacheck/fs.lua",
       ["luacheck.globbing"] = "src/luacheck/globbing.lua",
+      ["luacheck.inline_options"] = "src/luacheck/inline_options.lua",
+      ["luacheck.lexer"] = "src/luacheck/lexer.lua",
+      ["luacheck.linearize"] = "src/luacheck/linearize.lua",
+      ["luacheck.main"] = "src/luacheck/main.lua",
+      ["luacheck.multithreading"] = "src/luacheck/multithreading.lua",
+      ["luacheck.options"] = "src/luacheck/options.lua",
+      ["luacheck.parser"] = "src/luacheck/parser.lua",
+      ["luacheck.reachability"] = "src/luacheck/reachability.lua",
+      ["luacheck.stds"] = "src/luacheck/stds.lua",
       ["luacheck.utils"] = "src/luacheck/utils.lua",
-      ["luacheck.argparse"] = "src/luacheck/argparse.lua"
+      ["luacheck.version"] = "src/luacheck/version.lua"
    },
    install = {
       bin = {

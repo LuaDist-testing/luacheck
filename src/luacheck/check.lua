@@ -25,17 +25,17 @@ function ChState:warn(warning, implicit_self)
 end
 
 local action_codes = {
-   set = 1,
-   mutate = 2,
-   access = 3
+   set = "1",
+   mutate = "2",
+   access = "3"
 }
 
 local type_codes = {
-   var = 1,
-   func = 1,
-   arg = 2,
-   loop = 3,
-   loopi = 3
+   var = "1",
+   func = "1",
+   arg = "2",
+   loop = "3",
+   loopi = "3"
 }
 
 function ChState:warn_global(node, action, is_top)
@@ -50,7 +50,7 @@ end
 
 -- W12* (read-only global) and W131 (unused global) are patched in during filtering.
 
-function ChState:warn_unused_variable(value, recursive, self_recursive)
+function ChState:warn_unused_variable(value, recursive, self_recursive, useless)
    self:warn({
       code = "21" .. type_codes[value.var.type],
       name = value.var.name,
@@ -60,7 +60,8 @@ function ChState:warn_unused_variable(value, recursive, self_recursive)
       func = (value.type == "func") or nil,
       mutually_recursive = not self_recursive and recursive or nil,
       recursive = self_recursive,
-      self = value.var.self
+      self = value.var.self,
+      useless = value.var.name == "_" and useless or nil
    }, value.var.self)
 end
 
@@ -73,7 +74,7 @@ function ChState:warn_unset(var)
    })
 end
 
-function ChState:warn_unaccessed(var)
+function ChState:warn_unaccessed(var, mutated)
    -- Mark as secondary if all assigned values are secondary.
    -- It is guaranteed that there are at least two values.
    local secondary = true
@@ -86,7 +87,7 @@ function ChState:warn_unaccessed(var)
    end
 
    self:warn({
-      code = "23" .. type_codes[var.type],
+      code = "2" .. (mutated and "4" or "3") .. type_codes[var.type],
       name = var.name,
       line = var.location.line,
       column = var.location.column,
@@ -94,9 +95,9 @@ function ChState:warn_unaccessed(var)
    }, var.self)
 end
 
-function ChState:warn_unused_value(value)
+function ChState:warn_unused_value(value, mutated)
    self:warn({
-      code = "31" .. type_codes[value.type],
+      code = "3" .. (mutated and "3" or "1") .. type_codes[value.type],
       name = value.var.name,
       line = value.location.line,
       column = value.location.column,
@@ -115,9 +116,9 @@ function ChState:warn_unused_field_value(node)
    })
 end
 
-function ChState:warn_uninit(node)
+function ChState:warn_uninit(node, mutation)
    self:warn({
-      code = "321",
+      code = mutation and "341" or "321",
       name = node[1],
       line = node.location.line,
       column = node.location.column

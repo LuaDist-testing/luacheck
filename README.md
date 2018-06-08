@@ -24,10 +24,10 @@ Luacheck supports checking Lua files using syntax of Lua 5.1, Lua 5.2, Lua 5.3 a
 
 ## Installation
 
-The easiest way to install Luacheck is to use [LuaRocks](https://luarocks.org/). From your command line run the following command:
+The easiest way to install Luacheck is to use [LuaRocks](https://luarocks.org/). From your command line run the following command (using `sudo` if necessary):
 
-```bash
-$ luarocks install luacheck # prepend with sudo if necessary
+```
+luarocks install luacheck
 ```
 
 If it is not possible to install [LuaFileSystem](http://keplerproject.github.io/luafilesystem/) in your environment, use `luarocks install luacheck --deps-mode=none`. For parallel checking Luacheck additionally requires [LuaLanes](https://github.com/LuaLanes/lanes), which can be installed using LuaRocks as well.
@@ -36,7 +36,7 @@ If it is not possible to install [LuaFileSystem](http://keplerproject.github.io/
 
 For manual installation, only a Lua interpreter binary is required.
 
-1. Download and unpack latest Luacheck release ([.zip](https://github.com/mpeterv/luacheck/archive/0.15.1.zip) [.tar.gz](https://github.com/mpeterv/luacheck/archive/0.15.1.tar.gz)).
+1. Download and unpack latest Luacheck release ([.zip](https://github.com/mpeterv/luacheck/archive/0.16.0.zip) [.tar.gz](https://github.com/mpeterv/luacheck/archive/0.16.0.tar.gz)).
 2. Run `install.lua <path>` script using the Lua interpreter. If Lua interpreter is not in `PATH`, invoke it using absolute path.
 3. Add `<path>/bin` to PATH or run Luacheck as `<path>/bin/luacheck`.
 
@@ -45,7 +45,10 @@ For manual installation, only a Lua interpreter binary is required.
 After Luacheck is installed, run `luacheck` program from the command line. Pass a list of files, [rockspecs](https://github.com/keplerproject/luarocks/wiki/Rockspec-format) or directories (requires LuaFileSystem) to be checked:
 
 ```
-$ luacheck src extra_file.lua another_file.lua
+luacheck src extra_file.lua another_file.lua
+```
+
+```
 Checking src/good_code.lua               OK
 Checking src/bad_code.lua                3 warnings
 
@@ -102,7 +105,7 @@ Documentation can be built using [Sphinx](http://sphinx-doc.org/): `sphinx-build
 
 ## Development
 
-Luacheck is currently in development. The latest released version is 0.15.1. The interface of the `luacheck` module may change between minor releases. The command line interface is fairly stable.
+Luacheck is currently in development. The latest released version is 0.16.0. The interface of the `luacheck` module may change between minor releases. The command line interface is fairly stable.
 
 Use the Luacheck issue tracker on GitHub to submit bugs, suggestions and questions. Any pull requests are welcome, too.
 
