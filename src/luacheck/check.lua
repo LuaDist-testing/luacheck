@@ -5,6 +5,7 @@ local reachability = require "luacheck.reachability"
 local handle_inline_options = require "luacheck.inline_options"
 local core_utils = require "luacheck.core_utils"
 local utils = require "luacheck.utils"
+local check_whitespace = require "luacheck.whitespace"
 
 local function is_secondary(value)
    return value.secondaries and value.secondaries.used
@@ -108,7 +109,7 @@ end
 function ChState:warn_unused_field_value(node)
    self:warn({
       code = "314",
-      name = node.field,
+      field = node.field,
       index = node.is_index,
       line = node.location.line,
       column = node.location.column,
@@ -151,7 +152,7 @@ end
 function ChState:warn_unused_label(label)
    self:warn({
       code = "521",
-      name = label.name,
+      label = label.name,
       line = label.location.line,
       column = label.location.column,
       end_column = label.end_column
@@ -196,6 +197,7 @@ local function check_or_throw(src)
       chstate:warn_empty_statement(location)
    end
 
+   check_whitespace(chstate, src)
    analyze(chstate, line)
    reachability(chstate, line)
    handle_inline_options(ast, comments, code_lines, chstate.warnings)
