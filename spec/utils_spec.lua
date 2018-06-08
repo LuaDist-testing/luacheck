@@ -6,8 +6,16 @@ describe("utils", function()
          assert.equal("contents\n", utils.read_file("spec/folder/foo"))
       end)
 
+      it("removes UTF-8 BOM", function()
+         assert.equal("foo\nbar\n", utils.read_file("spec/folder/bom"))
+      end)
+
       it("returns nil for non-existent paths", function()
          assert.is_nil(utils.read_file("spec/folder/non-existent"))
+      end)
+
+      it("returns nil for directories", function()
+         assert.is_nil(utils.read_file("spec/folder"))
       end)
    end)
 
@@ -25,7 +33,7 @@ describe("utils", function()
 
    describe("load_config", function()
       it("loads config from a file and returns it", function()
-         assert.same({foo = "bar"}, utils.load_config("spec/folder/config"))
+         assert.same({foo = "bar"}, (utils.load_config("spec/folder/config")))
       end)
 
       it("passes second argument as environment", function()
@@ -33,7 +41,7 @@ describe("utils", function()
          assert.same({
             foo = "bar",
             bar = bar
-         }, utils.load_config("spec/folder/env_config", {bar = bar}))
+         }, (utils.load_config("spec/folder/env_config", {bar = bar})))
       end)
 
       it("returns nil, \"I/O\" for non-existent paths", function()
@@ -48,10 +56,10 @@ describe("utils", function()
          assert.equal("syntax", err)
       end)
 
-      it("returns nil, \"syntax\" for configs with run-time errors", function()
+      it("returns nil, \"runtime\" for configs with run-time errors", function()
          local ok, err = utils.load_config("spec/folder/env_config")
          assert.is_nil(ok)
-         assert.equal("syntax", err)
+         assert.equal("runtime", err)
       end)
    end)
 
@@ -143,7 +151,9 @@ describe("utils", function()
       end)
 
       it("rethrows if f crashes (throws not a table)", function()
-         assert.has_error(function() utils.pcall(error, "msg") end, "msg\nstack traceback:")
+         local ok, err = pcall(utils.pcall, error, "msg")
+         assert.is_false(ok)
+         assert.matches("msg\nstack traceback:", err)
       end)
    end)
 

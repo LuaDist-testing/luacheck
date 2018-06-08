@@ -226,6 +226,36 @@ describe("filter", function()
       }))
    end)
 
+   it("filters unused and redefined warnings related to implicit self", function()
+      assert.same({
+         {
+            {
+               code = "212",
+               name = "self"
+            }
+         }
+      }, filter({
+         {
+            {
+               code = "212",
+               name = "self",
+               self = true
+            },
+            {
+               code = "432",
+               name = "self",
+               self = true
+            },
+            {
+               code = "212",
+               name = "self"
+            }
+         }
+      }, {
+         self = false
+      }))
+   end)
+
    it("filters defined globals", function()
       assert.same({
          {
@@ -424,7 +454,7 @@ describe("filter", function()
       }, {
             {
                allow_defined = true,
-               unused_globals = false
+               ignore = {"13"}
             },
             {
                allow_defined_top = true,
@@ -462,39 +492,6 @@ describe("filter", function()
                allow_defined = true,
                module = true
             }
-      }))
-   end)
-
-   it("removes unused global warnings with unused_globals = false", function()
-      assert.same({
-         {
-            {
-               code = "113",
-               name = "baz"
-            }
-         }
-      }, filter({
-         {
-            {
-               code = "113",
-               name = "foo"
-            },
-            {
-               code = "111",
-               name = "foo"
-            },
-            {
-               code = "111",
-               name = "bar"
-            },
-            {
-               code = "113",
-               name = "baz"
-            }
-         }
-      }, {
-         allow_defined = true,
-         unused_globals = false
       }))
    end)
 end)

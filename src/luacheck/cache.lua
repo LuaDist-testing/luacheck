@@ -4,34 +4,15 @@ local cache = {}
 
 -- Cache file contains check results for n unique filenames.
 -- Cache file consists of 3n lines, 3 lines per file.
--- For each file, first line is the filename, second is modification time, third is check result in lua table format.
+-- For each file, first line is the filename, second is modification time,
+-- third is check result in lua table format.
 -- String fields are compressed into array indexes.
 
 local fields = {
-   "code",
-   "name",
-   "line",
-   "column",
-   "prev_line",
-   "prev_column",
-   "secondary",
-   "func",
-   "vararg",
-   "filtered",
-   "top",
-   "invalid",
-   "unpaired",
-   "read_only",
-   "global",
-   "filtered_111",
-   "filtered_121",
-   "filtered_131",
-   "filtered_112",
-   "filtered_122",
-   "filtered_113",
-   "definition",
-   "in_module"
-}
+   "code", "name", "line", "column", "prev_line", "prev_column", "secondary", "self", "func",
+   "filtered", "top", "invalid", "unpaired", "read_only", "global", "filtered_111",
+   "filtered_121", "filtered_131", "filtered_112", "filtered_122", "filtered_113", "definition",
+   "in_module", "msg"}
 
 -- Converts table with fields into table with indexes.
 local function compress(t)
@@ -102,10 +83,6 @@ end
 
 -- Serializes check result into a string.
 function cache.serialize(events)
-   if events.error then
-      return ("return {%d,%d,%d,%s}"):format(events.line, events.column, events.offset, ("%q"):format(events.msg))
-   end
-
    local strings = {}
    local buffer = {"", "return {"}
 
@@ -120,28 +97,13 @@ function cache.serialize(events)
    table.insert(buffer, "}")
 
    if strings[1] then
-      local locals = {"local "}
+      local names = {}
 
       for index in ipairs(strings) do
-         if index > 1 then
-            table.insert(locals, ",")
-         end
-
-         table.insert(locals, get_local_name(index))
+         table.insert(names, get_local_name(index))
       end
 
-      table.insert(locals, "=")
-
-      for index, value in ipairs(strings) do
-         if index > 1 then
-            table.insert(locals, ",")
-         end
-
-         table.insert(locals, value)
-      end
-
-      table.insert(locals, ";")
-      buffer[1] = table.concat(locals)
+      buffer[1] = "local " .. table.concat(names, ",") .. "=" .. table.concat(strings, ",") .. ";"
    end
 
    return table.concat(buffer)
@@ -202,17 +164,6 @@ local function load_cached(cached)
 
    if type(res) ~= "table" then
       return
-   end
-
-   -- Is it a syntax error message?
-   if type(res[1]) == "number" then
-      return {
-         error = "syntax",
-         line = res[1],
-         column = res[2],
-         offset = res[3],
-         msg = res[4]
-      }
    end
 
    local decompressed = {}

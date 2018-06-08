@@ -1,5 +1,19 @@
 local luacheck = require "luacheck"
 
+local function strip_locations(report)
+   for _, file_report in ipairs(report) do
+      for _, event in ipairs(file_report) do
+         event.line = nil
+         event.column = nil
+         event.end_column = nil
+         event.prev_line = nil
+         event.prev_column = nil
+      end
+   end
+
+   return report
+end
+
 describe("luacheck", function()
    it("is an alias of luacheck.check_files", function()
       assert.same(luacheck.check_files({
@@ -32,8 +46,9 @@ describe("luacheck", function()
    it("works on empty list", function()
       assert.same({
          warnings = 0,
-         errors = 0
-      }, luacheck({}))
+         errors = 0,
+         fatals = 0
+      }, strip_locations(luacheck({})))
    end)
 
    it("works on files", function()
@@ -43,53 +58,40 @@ describe("luacheck", function()
             {
                code = "211",
                name = "helper",
-               line = 3,
-               column = 16,
                func = true
             },
             {
                code = "212",
-               name = "...",
-               line = 3,
-               column = 23,
-               vararg = true
+               name = "..."
             },
             {
                code = "111",
                name = "embrace",
-               line = 7,
-               column = 10,
                top = true
             },
             {
                code = "412",
-               name = "opt",
-               line = 8,
-               column = 10,
-               prev_line = 7,
-               prev_column = 18
+               name = "opt"
             },
             {
                code = "113",
-               name = "hepler",
-               line = 9,
-               column = 11
+               name = "hepler"
             }
          },
          {
-            error = "syntax",
-            line = 1,
-            column = 6,
-            offset = 6,
-            msg = "expected '=' near '__future__'"
+            {
+               code = "011",
+               msg = "expected '=' near '__future__'"
+            }
          },
          warnings = 5,
-         errors = 1
-      }, luacheck({
+         errors = 1,
+         fatals = 0
+      }, strip_locations(luacheck({
          "spec/samples/good_code.lua",
          "spec/samples/bad_code.lua",
          "spec/samples/python_code.lua"
-      }))
+      })))
    end)
 
    it("uses options", function()
@@ -99,41 +101,33 @@ describe("luacheck", function()
             {
                code = "111",
                name = "embrace",
-               line = 7,
-               column = 10,
                top = true
             },
             {
                code = "412",
-               name = "opt",
-               line = 8,
-               column = 10,
-               prev_line = 7,
-               prev_column = 18
+               name = "opt"
             },
             {
                code = "113",
-               name = "hepler",
-               line = 9,
-               column = 11
+               name = "hepler"
             }
          },
          {
-            error = "syntax",
-            line = 1,
-            column = 6,
-            offset = 6,
-            msg = "expected '=' near '__future__'"
+            {
+               code = "011",
+               msg = "expected '=' near '__future__'"
+            }
          },
          warnings = 3,
-         errors = 1
-      }, luacheck({
+         errors = 1,
+         fatals = 0
+      }, strip_locations(luacheck({
          "spec/samples/good_code.lua",
          "spec/samples/bad_code.lua",
          "spec/samples/python_code.lua"
       }, {
          unused = false
-      }))
+      })))
    end)
 
    it("uses option overrides", function()
@@ -143,27 +137,23 @@ describe("luacheck", function()
             {
                code = "111",
                name = "embrace",
-               line = 7,
-               column = 10,
                top = true
             },
             {
                code = "113",
-               name = "hepler",
-               line = 9,
-               column = 11
+               name = "hepler"
             }
          },
          {
-            error = "syntax",
-            line = 1,
-            column = 6,
-            offset = 6,
-            msg = "expected '=' near '__future__'"
+            {
+               code = "011",
+               msg = "expected '=' near '__future__'"
+            }
          },
          warnings = 2,
-         errors = 1
-      }, luacheck({
+         errors = 1,
+         fatals = 0
+      }, strip_locations(luacheck({
          "spec/samples/good_code.lua",
          "spec/samples/bad_code.lua",
          "spec/samples/python_code.lua"
@@ -175,7 +165,7 @@ describe("luacheck", function()
             redefined = false
          },
          global = false
-      }  ))
+      })))
    end)
 end)
 
@@ -199,7 +189,8 @@ describe("check_strings", function()
    it("works on empty list", function()
       assert.same({
          warnings = 0,
-         errors = 0
+         errors = 0,
+         fatals = 0
       }, luacheck.check_strings({}))
    end)
 
@@ -208,54 +199,204 @@ describe("check_strings", function()
          {
             {
                code = "113",
-               name = "foo",
-               line = 1,
-               column = 8
+               name = "foo"
             }
          },
          {
-            error = "syntax",
-            line = 1,
-            column = 8,
-            offset = 8,
-            msg = "unexpected symbol near 'return'"
+            {
+               code = "011",
+               msg = "unexpected symbol near 'return'"
+            }
          },
          warnings = 1,
-         errors = 1
-      }, luacheck.check_strings({"return foo", "return return"}))
+         errors = 1,
+         fatals = 0
+      }, strip_locations(luacheck.check_strings({"return foo", "return return"})))
+   end)
+
+   it("provides correct location info for warnings", function()
+      assert.same({
+         {
+            {
+               code = "521",
+               name = "foo",
+               line = 1,
+               column = 1,
+               end_column = 6
+            },
+            {
+               code = "312",
+               name = "self",
+               line = 3,
+               column = 11,
+               end_column = 11
+            },
+            {
+               code = "311",
+               name = "self",
+               line = 4,
+               column = 4,
+               end_column = 7
+            },
+            {
+               code = "511",
+               line = 9,
+               column = 1,
+               end_column = 1
+            }
+         },
+         warnings = 4,
+         errors = 0,
+         fatals = 0
+      }, luacheck.check_strings({[[
+:: foo
+::local t = {}
+function t:m(x)
+   self = x
+   self = x
+   return self
+end
+do return t end
+(t)()
+]]}))
+   end)
+
+   it("provides correct location info for bad inline options", function()
+      assert.same({
+         {
+            {
+               code = "022",
+               line = 1,
+               column = 1,
+               end_column = 17
+            },
+            {
+               code = "023",
+               line = 3,
+               column = 4,
+               end_column = 26
+            },
+            {
+               code = "021",
+               line = 6,
+               column = 10,
+               end_column = 14
+            }
+         },
+         warnings = 0,
+         errors = 3,
+         fatals = 0
+      }, luacheck.check_strings({[[
+-- luacheck: push
+local function f()
+   --[=[ luacheck: pop ]=]
+end
+
+return f --[=[
+   luacheck: some invalid comment
+]=]
+]]}))
+   end)
+
+   it("provides correct location info for syntax errors", function()
+      assert.same({
+         {
+            {
+               code = "011",
+               msg = "unfinished string",
+               line = 1,
+               column = 11,
+               end_column = 11
+            }
+         },
+         {
+            {
+               code = "011",
+               msg = "invalid hexadecimal escape sequence '\\x2'",
+               line = 1,
+               column = 15,
+               end_column = 17
+            }
+         },
+         {
+            {
+               code = "011",
+               msg = "expected 'then' near <eof>",
+               line = 1,
+               column = 9,
+               end_column = 9
+            }
+         },
+         {
+            {
+               code = "011",
+               msg = "label 'b' already defined on line 1",
+               line = 1,
+               column = 7,
+               end_column = 11
+            }
+         },
+         {
+            {
+               code = "011",
+               msg = "cannot use '...' outside a vararg function",
+               line = 1,
+               column = 15,
+               end_column = 17
+            }
+         },
+         {
+            {
+               code = "011",
+               msg = "'break' is not inside a loop",
+               line = 1,
+               column = 1,
+               end_column = 5
+            }
+         },
+         warnings = 0,
+         errors = 6,
+         fatals = 0
+      }, luacheck.check_strings({
+         [[local x = "foo]],
+         [[local x = "foo\x2]],
+         [[if true ]],
+         [[::b:: ::b::]],
+         [[function f() (...)() end]],
+         [[break it()]]
+         }))
    end)
 
    it("uses options", function()
       assert.same({
          {},
          {
-            error = "syntax",
-            line = 1,
-            column = 8,
-            offset = 8,
-            msg = "unexpected symbol near 'return'"
+            {
+               code = "011",
+               msg = "unexpected symbol near 'return'"
+            }
          },
          warnings = 0,
-         errors = 1
-      }, luacheck.check_strings({"return foo", "return return"}, {ignore = {"113"}}))
+         errors = 1,
+         fatals = 0
+      }, strip_locations(luacheck.check_strings({"return foo", "return return"}, {ignore = {"113"}})))
    end)
 
-   it("ignores tables", function()
+   it("ignores tables with .fatal field", function()
       assert.same({
          {
             {
                code = "113",
-               name = "foo",
-               line = 1,
-               column = 8
+               name = "foo"
             }
          },
          {
-            error = "I/O"
+            fatal = "I/O"
          },
          warnings = 1,
-         errors = 1
-      }, luacheck.check_strings({"return foo", {error = "I/O"}}))
+         errors = 0,
+         fatals = 1
+      }, strip_locations(luacheck.check_strings({"return foo", {fatal = "I/O"}})))
    end)
 end)
 
@@ -269,10 +410,9 @@ describe("get_report", function()
       assert.is_table(luacheck.get_report("return foo"))
    end)
 
-   it("returns nil, error on syntax error", function()
-      local res, err = luacheck.get_report("return return")
-      assert.is_nil(res)
-      assert.same({line = 1, column = 8, offset = 8, msg = "unexpected symbol near 'return'"}, err)
+   it("returns a table with single error event on syntax error", function()
+      local report = strip_locations({luacheck.get_report("return return")})[1]
+      assert.same({code = "011", msg = "unexpected symbol near 'return'"}, report[1])
    end)
 end)
 
@@ -296,15 +436,14 @@ describe("process_reports", function()
          {
             {
                code = "113",
-               name = "foo",
-               line = 1,
-               column = 8
+               name = "foo"
             }
          },
          {},
          warnings = 1,
-         errors = 0
-      }, luacheck.process_reports({luacheck.get_report("return foo"), luacheck.get_report("return math")}))
+         errors = 0,
+         fatals = 0
+      }, strip_locations(luacheck.process_reports({luacheck.get_report("return foo"), luacheck.get_report("return math")})))
    end)
 
    it("uses options", function()
@@ -312,23 +451,48 @@ describe("process_reports", function()
          {
             {
                code = "113",
-               name = "foo",
-               line = 1,
-               column = 8
+               name = "foo"
             }
          },
          {
             {
                code = "113",
-               name = "math",
-               line = 1,
-               column = 8
+               name = "math"
             }
          },
          warnings = 2,
-         errors = 0
-      }, luacheck.process_reports({luacheck.get_report("return foo"), luacheck.get_report("return math")}, {
+         errors = 0,
+         fatals = 0
+      }, strip_locations(luacheck.process_reports({luacheck.get_report("return foo"), luacheck.get_report("return math")}, {
          std = "none"
+      })))
+   end)
+end)
+
+describe("get_message", function()
+   it("panics on bad events", function()
+      assert.has_error(function() luacheck.get_message("foo") end,
+         "bad argument #1 to 'luacheck.get_message' (table expected, got string)")
+   end)
+
+   it("returns message for an event", function()
+      assert.equal("unused argument 'bar'", luacheck.get_message({
+         code = "212",
+         name = "bar"
+      }))
+      assert.equal("shadowing definition of loop variable 'foo' on line 1", luacheck.get_message({
+         code = "423",
+         name = "foo",
+         line = 2,
+         prev_line = 1
+      }))
+      assert.equal("message goes here", luacheck.get_message({
+         code = "011",
+         msg = "message goes here"
+      }))
+      assert.equal("unexpected character near '%'", luacheck.get_message({
+         code = "011",
+         msg = "unexpected character near '%'"
       }))
    end)
 end)

@@ -99,7 +99,9 @@ print("    Installing luacheck modules into " .. luacheck_src_dir)
 mkdir(luacheck_lib_dir)
 
 for _, filename in ipairs {
+      "main.lua",
       "init.lua",
+      "config.lua",
       "linearize.lua",
       "analyze.lua",
       "reachability.lua",
@@ -117,6 +119,7 @@ for _, filename in ipairs {
       "format.lua",
       "version.lua",
       "fs.lua",
+      "globbing.lua",
       "utils.lua",
       "argparse.lua"} do
    copy("src" .. dirsep .. "luacheck" .. dirsep .. filename, luacheck_lib_dir)

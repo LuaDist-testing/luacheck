@@ -1,15 +1,21 @@
 local utils = require "luacheck.utils"
 local multithreading = require "luacheck.multithreading"
+local helper = require "spec.helper"
+local luacheck_cmd = helper.luacheck_command()
 
-local function get_output(command, color)
-   local handler = io.popen("luacheck --no-config " .. command .. " 2>&1")
+setup(helper.before_command)
+teardown(helper.after_command)
+
+local function get_output(command, wd, color)
+   command = ("%s %s 2>&1"):format(helper.luacheck_command(wd), command)
+   local handler = io.popen(command)
    local output = handler:read("*a"):gsub("\27.-\109", color and "#" or "")
    handler:close()
    return output
 end
 
 local function get_exitcode(command)
-   local code51, _, code52 = os.execute("luacheck --no-config "..command.." > /dev/null 2>&1")
+   local code51, _, code52 = os.execute(luacheck_cmd.." "..command.." > /dev/null 2>&1")
    return _VERSION:find "5.1" and code51/256 or code52
 end
 
@@ -23,8 +29,8 @@ describe("cli", function()
 Checking spec/samples/good_code.lua               OK
 
 Total: 0 warnings / 0 errors in 1 file
-]], get_output "spec/samples/good_code.lua")
-      assert.equal(0, get_exitcode "spec/samples/good_code.lua")
+]], get_output "spec/samples/good_code.lua --no-config")
+      assert.equal(0, get_exitcode "spec/samples/good_code.lua --no-config")
    end)
 
    it("removes ./ in the beginnings of file names", function()
@@ -32,12 +38,44 @@ Total: 0 warnings / 0 errors in 1 file
 Checking spec/samples/good_code.lua               OK
 
 Total: 0 warnings / 0 errors in 1 file
-]], get_output "./spec/samples/good_code.lua")
+]], get_output "./spec/samples/good_code.lua --no-config")
+   end)
+
+   it("allows setting new filename", function()
+      assert.equal([[
+Checking new.lua                                  OK
+
+Total: 0 warnings / 0 errors in 1 file
+]], get_output "spec/samples/good_code.lua --no-config --filename new.lua")
+   end)
+
+   it("filters files using --exclude-files", function()
+      assert.equal([[
+Checking spec/samples/good_code.lua               OK
+
+Total: 0 warnings / 0 errors in 1 file
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --no-config --exclude-files '**/??d_code.lua'")
+   end)
+
+   it("filters files using --include-files", function()
+      assert.equal([[
+Checking spec/samples/bad_code.lua                5 warnings
+
+Total: 5 warnings / 0 errors in 1 file
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --no-config --include-files '**/??d_code.lua' -qq")
+   end)
+
+   it("--exclude-files has priority over --include-files", function()
+      assert.equal([[
+Checking spec/samples/good_code.lua               OK
+
+Total: 0 warnings / 0 errors in 1 file
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --no-config --include-files '**/*.lua' --exclude-files '**/??d_code.lua'")
    end)
 
    it("works for incorrect files", function()
       assert.equal([[
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                5 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -46,20 +84,34 @@ Checking spec/samples/bad_code.lua                Failure
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
 Total: 5 warnings / 0 errors in 1 file
-]], get_output "spec/samples/bad_code.lua")
-      assert.equal(1, get_exitcode "spec/samples/bad_code.lua")
+]], get_output "spec/samples/bad_code.lua --no-config")
+      assert.equal(1, get_exitcode "spec/samples/bad_code.lua --no-config")
    end)
 
    it("works for incorrect patterns in options", function()
       assert.equal([[
-Fatal error: Invalid pattern '^%1foo$'
-]], get_output "spec/samples/bad_code.lua --ignore %1foo")
+Critical error: Invalid pattern '^%1foo$'
+]], get_output "spec/samples/bad_code.lua --ignore %1foo --no-config")
+   end)
+
+   it("checks stdin when given -", function()
+      assert.equal([[
+Checking stdin                                    5 warnings
+
+    stdin:3:16: unused function helper
+    stdin:3:23: unused variable length argument
+    stdin:7:10: setting non-standard global variable embrace
+    stdin:8:10: variable opt was previously defined as an argument on line 7
+    stdin:9:11: accessing undefined variable hepler
+
+Total: 5 warnings / 0 errors in 1 file
+]], get_output "- --config=spec/configs/override_config.luacheckrc < spec/samples/bad_code.lua")
    end)
 
    it("colors output", function()
       assert.equal([[
 Checking spec/samples/good_code.lua               ###OK#
-Checking spec/samples/bad_code.lua                ###Failure#
+Checking spec/samples/bad_code.lua                ###5 warnings#
 
     spec/samples/bad_code.lua:3:16: unused function ##helper#
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -68,13 +120,13 @@ Checking spec/samples/bad_code.lua                ###Failure#
     spec/samples/bad_code.lua:9:11: accessing undefined variable ##hepler#
 
 Total: ###5# warnings / ###0# errors in 2 files
-]], get_output ("spec/samples/good_code.lua spec/samples/bad_code.lua", true))
+]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua --no-config", nil, true))
    end)
 
    it("does not color output with --no-color", function()
       assert.equal([[
 Checking spec/samples/good_code.lua               OK
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                5 warnings
 
     spec/samples/bad_code.lua:3:16: unused function 'helper'
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -83,11 +135,11 @@ Checking spec/samples/bad_code.lua                Failure
     spec/samples/bad_code.lua:9:11: accessing undefined variable 'hepler'
 
 Total: 5 warnings / 0 errors in 2 files
-]], get_output ("spec/samples/good_code.lua spec/samples/bad_code.lua --no-color", true))
+]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua --no-color --no-config", nil, true))
    end)
 
    it("suppresses OK output with -q", function()
-      assert.equal([[Checking spec/samples/bad_code.lua                Failure
+      assert.equal([[Checking spec/samples/bad_code.lua                5 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -95,7 +147,7 @@ Total: 5 warnings / 0 errors in 2 files
     spec/samples/bad_code.lua:8:10: variable opt was previously defined as an argument on line 7
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
-Checking spec/samples/unused_code.lua             Failure
+Checking spec/samples/unused_code.lua             9 warnings
 
     spec/samples/unused_code.lua:3:18: unused argument baz
     spec/samples/unused_code.lua:4:8: unused loop variable i
@@ -108,46 +160,46 @@ Checking spec/samples/unused_code.lua             Failure
     spec/samples/unused_code.lua:21:7: variable z is never accessed
 
 Total: 14 warnings / 0 errors in 3 files
-]], get_output "-q spec/samples/*d_code.lua")
+]], get_output "-q spec/samples/*d_code.lua --no-config")
       assert.equal([[
 Total: 0 warnings / 0 errors in 1 file
-]], get_output "-q spec/samples/good_code.lua")
+]], get_output "-q spec/samples/good_code.lua --no-config")
    end)
 
    it("suppresses warnings output with -qq", function()
-      assert.equal([[Checking spec/samples/bad_code.lua                Failure
-Checking spec/samples/unused_code.lua             Failure
+      assert.equal([[Checking spec/samples/bad_code.lua                5 warnings
+Checking spec/samples/unused_code.lua             9 warnings
 
 Total: 14 warnings / 0 errors in 3 files
-]], get_output "-qq spec/samples/*d_code.lua")
+]], get_output "-qq spec/samples/*d_code.lua --no-config")
    end)
 
    it("suppresses file info output with -qqq", function()
       assert.equal([[Total: 14 warnings / 0 errors in 3 files
-]], get_output "-qqq spec/samples/*d_code.lua")
+]], get_output "-qqq spec/samples/*d_code.lua --no-config")
    end)
 
    it("allows to ignore some types of warnings", function()
       assert.equal([[
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                3 warnings
 
     spec/samples/bad_code.lua:7:10: setting non-standard global variable embrace
     spec/samples/bad_code.lua:8:10: variable opt was previously defined as an argument on line 7
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
 Total: 3 warnings / 0 errors in 1 file
-]], get_output "-u spec/samples/bad_code.lua")
+]], get_output "-u spec/samples/bad_code.lua --no-config")
       assert.equal([[
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                3 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
     spec/samples/bad_code.lua:8:10: variable opt was previously defined as an argument on line 7
 
 Total: 3 warnings / 0 errors in 1 file
-]], get_output "-g spec/samples/bad_code.lua")
+]], get_output "-g spec/samples/bad_code.lua --no-config")
       assert.equal([[
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                4 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -155,12 +207,12 @@ Checking spec/samples/bad_code.lua                Failure
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
 Total: 4 warnings / 0 errors in 1 file
-]], get_output "-r spec/samples/bad_code.lua")
+]], get_output "-r spec/samples/bad_code.lua --no-config")
    end)
 
    it("allows to define additional globals", function()
       assert.equal([[
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                4 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -168,12 +220,12 @@ Checking spec/samples/bad_code.lua                Failure
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
 Total: 4 warnings / 0 errors in 1 file
-]], get_output "--globals embrace -- spec/samples/bad_code.lua")
+]], get_output "spec/samples/bad_code.lua --globals embrace --no-config")
    end)
 
    it("allows to set standard globals", function()
       assert.equal([[
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                6 warnings
 
     spec/samples/bad_code.lua:1:1: accessing undefined variable package
     spec/samples/bad_code.lua:3:16: unused function helper
@@ -183,9 +235,9 @@ Checking spec/samples/bad_code.lua                Failure
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
 Total: 6 warnings / 0 errors in 1 file
-]], get_output "--std none spec/samples/bad_code.lua")
+]], get_output "--std none spec/samples/bad_code.lua --no-config")
       assert.equal([[
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                5 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -194,34 +246,34 @@ Checking spec/samples/bad_code.lua                Failure
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
 Total: 5 warnings / 0 errors in 1 file
-]], get_output "--std max spec/samples/bad_code.lua")
+]], get_output "--std lua51+lua52+lua53 spec/samples/bad_code.lua --no-config")
    end)
 
    it("allows to ignore some variables", function()
       assert.equal([[
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                3 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
 Total: 3 warnings / 0 errors in 1 file
-]], get_output "spec/samples/bad_code.lua --ignore embrace opt")
+]], get_output "spec/samples/bad_code.lua --ignore embrace opt --no-config")
    end)
 
    it("allows to only watch some variables", function()
       assert.equal([[
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                1 warning
 
     spec/samples/bad_code.lua:3:16: unused function helper
 
 Total: 1 warning / 0 errors in 1 file
-]], get_output "spec/samples/bad_code.lua --only helper")
+]], get_output "spec/samples/bad_code.lua --only helper --no-config")
    end)
 
    it("recognizes different types of variables", function()
       assert.equal([[
-Checking spec/samples/unused_code.lua             Failure
+Checking spec/samples/unused_code.lua             9 warnings
 
     spec/samples/unused_code.lua:3:18: unused argument baz
     spec/samples/unused_code.lua:4:8: unused loop variable i
@@ -234,12 +286,12 @@ Checking spec/samples/unused_code.lua             Failure
     spec/samples/unused_code.lua:21:7: variable z is never accessed
 
 Total: 9 warnings / 0 errors in 1 file
-]], get_output "spec/samples/unused_code.lua")
+]], get_output "spec/samples/unused_code.lua --no-config")
    end)
 
    it("allows to ignore unused arguments", function()
       assert.equal([[
-Checking spec/samples/unused_code.lua             Failure
+Checking spec/samples/unused_code.lua             4 warnings
 
     spec/samples/unused_code.lua:5:13: unused variable q
     spec/samples/unused_code.lua:13:7: value assigned to variable x is unused
@@ -247,12 +299,12 @@ Checking spec/samples/unused_code.lua             Failure
     spec/samples/unused_code.lua:21:7: variable z is never accessed
 
 Total: 4 warnings / 0 errors in 1 file
-]], get_output "spec/samples/unused_code.lua --no-unused-args")
+]], get_output "spec/samples/unused_code.lua --no-unused-args --no-config")
    end)
 
    it("allows to ignore unused secondary values and variables", function()
       assert.equal([[
-Checking spec/samples/unused_secondaries.lua      Failure
+Checking spec/samples/unused_secondaries.lua      4 warnings
 
     spec/samples/unused_secondaries.lua:3:7: unused variable a
     spec/samples/unused_secondaries.lua:6:7: unused variable x
@@ -260,33 +312,47 @@ Checking spec/samples/unused_secondaries.lua      Failure
     spec/samples/unused_secondaries.lua:12:1: value assigned to variable o is unused
 
 Total: 4 warnings / 0 errors in 1 file
-]], get_output "spec/samples/unused_secondaries.lua")
+]], get_output "spec/samples/unused_secondaries.lua --no-config")
 
       assert.equal([[
-Checking spec/samples/unused_secondaries.lua      Failure
+Checking spec/samples/unused_secondaries.lua      1 warning
 
     spec/samples/unused_secondaries.lua:6:7: unused variable x
 
 Total: 1 warning / 0 errors in 1 file
-]], get_output "spec/samples/unused_secondaries.lua -s")
+]], get_output "spec/samples/unused_secondaries.lua -s --no-config")
+   end)
+
+   it("allows to ignore warnings related to implicit self", function()
+      assert.equal([[
+Checking spec/samples/redefined.lua               5 warnings
+
+    spec/samples/redefined.lua:4:10: shadowing upvalue a on line 1
+    spec/samples/redefined.lua:4:13: variable self is never set
+    spec/samples/redefined.lua:4:13: variable self was previously defined as an argument on line 3
+    spec/samples/redefined.lua:7:13: shadowing definition of variable a on line 4
+    spec/samples/redefined.lua:8:32: shadowing upvalue self on line 4
+
+Total: 5 warnings / 0 errors in 1 file
+]], get_output "spec/samples/redefined.lua --no-self --globals each --no-config")
    end)
 
    it("handles errors gracefully", function()
       assert.equal([[
-Checking spec/samples/python_code.lua             Syntax error
+Checking spec/samples/python_code.lua             1 error
 
     spec/samples/python_code.lua:1:6: expected '=' near '__future__'
 
 Checking spec/samples/absent_code.lua             I/O error
 
-Total: 0 warnings / 2 errors in 2 files
-]], get_output "spec/samples/python_code.lua spec/samples/absent_code.lua")
-      assert.equal(2, get_exitcode "spec/samples/python_code.lua spec/samples/absent_code.lua")
+Total: 0 warnings / 1 error in 1 file, couldn't check 1 file
+]], get_output "spec/samples/python_code.lua spec/samples/absent_code.lua --no-config")
+      assert.equal(2, get_exitcode "spec/samples/python_code.lua spec/samples/absent_code.lua --no-config")
    end)
 
    it("expands rockspecs", function()
       assert.equal([[
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                5 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -297,81 +363,81 @@ Checking spec/samples/bad_code.lua                Failure
 Checking spec/samples/good_code.lua               OK
 
 Total: 5 warnings / 0 errors in 2 files
-]], get_output "spec/samples/sample.rockspec")
+]], get_output "spec/samples/sample.rockspec --no-config")
    end)
 
    it("handles bad rockspecs", function()
       assert.equal([[
 Checking spec/samples/bad.rockspec                Syntax error
 
-Total: 0 warnings / 1 error in 1 file
-]], get_output "spec/samples/bad.rockspec")
+Total: 0 warnings / 0 errors in 0 files, couldn't check 1 file
+]], get_output "spec/samples/bad.rockspec --no-config")
    end)
 
    it("allows ignoring defined globals", function()
       assert.equal([[
-Checking spec/samples/defined.lua                 Failure
+Checking spec/samples/defined.lua                 1 warning
 
     spec/samples/defined.lua:4:4: accessing undefined variable baz
 
 Checking spec/samples/defined2.lua                OK
 
 Total: 1 warning / 0 errors in 2 files
-]], get_output "spec/samples/defined.lua spec/samples/defined2.lua -d")
+]], get_output "spec/samples/defined.lua spec/samples/defined2.lua -d --no-config")
 
    assert.equal([[
 Checking spec/samples/defined2.lua                OK
-Checking spec/samples/defined.lua                 Failure
+Checking spec/samples/defined.lua                 1 warning
 
     spec/samples/defined.lua:4:4: accessing undefined variable baz
 
 Total: 1 warning / 0 errors in 2 files
-]], get_output "spec/samples/defined2.lua spec/samples/defined.lua -d")
+]], get_output "spec/samples/defined2.lua spec/samples/defined.lua -d --no-config")
    end)
 
    it("allows restricting scope of defined globals to the file with their definition", function()
       assert.equal([[
-Checking spec/samples/defined2.lua                Failure
+Checking spec/samples/defined2.lua                1 warning
 
     spec/samples/defined2.lua:1:1: accessing undefined variable foo
 
 Checking spec/samples/defined3.lua                OK
 
 Total: 1 warning / 0 errors in 2 files
-]], get_output "spec/samples/defined2.lua spec/samples/defined3.lua -d -m")
+]], get_output "spec/samples/defined2.lua spec/samples/defined3.lua -d -m --no-config")
    end)
 
    it("allows ignoring globals defined in top level scope", function()
       assert.equal([[
-Checking spec/samples/defined4.lua                Failure
+Checking spec/samples/defined4.lua                2 warnings
 
     spec/samples/defined4.lua:1:10: unused global variable foo
     spec/samples/defined4.lua:3:4: setting non-standard global variable bar
 
 Total: 2 warnings / 0 errors in 1 file
-]], get_output "spec/samples/defined4.lua -t")
+]], get_output "spec/samples/defined4.lua -t --no-config")
    end)
 
    it("detects unused defined globals", function()
       assert.equal([[
-Checking spec/samples/defined3.lua                Failure
+Checking spec/samples/defined3.lua                3 warnings
 
     spec/samples/defined3.lua:1:1: unused global variable foo
     spec/samples/defined3.lua:2:1: unused global variable foo
     spec/samples/defined3.lua:3:1: unused global variable bar
 
 Total: 3 warnings / 0 errors in 1 file
-]], get_output "spec/samples/defined3.lua -d")
+]], get_output "spec/samples/defined3.lua -d --no-config")
 
       assert.equal([[
-Checking spec/samples/defined3.lua                Failure
+Checking spec/samples/defined3.lua                1 warning
 
     spec/samples/defined3.lua:3:1: unused global variable bar
 
 Checking spec/samples/defined2.lua                OK
 
 Total: 1 warning / 0 errors in 2 files
-]], get_output "spec/samples/defined3.lua spec/samples/defined2.lua -d")
+]], get_output "spec/samples/defined3.lua spec/samples/defined2.lua -d --no-config")
    end)
 
    it("treats `unused global` warnings as `global` type warnings", function()
@@ -379,17 +445,17 @@ Total: 1 warning / 0 errors in 2 files
 Checking spec/samples/defined3.lua                OK
 
 Total: 0 warnings / 0 errors in 1 file
-]], get_output "spec/samples/defined3.lua -gd")
+]], get_output "spec/samples/defined3.lua -gd --no-config")
 
       assert.equal([[
-Checking spec/samples/defined3.lua                Failure
+Checking spec/samples/defined3.lua                1 warning
 
     spec/samples/defined3.lua:3:1: unused global variable bar
 
 Checking spec/samples/defined2.lua                OK
 
 Total: 1 warning / 0 errors in 2 files
-]], get_output "spec/samples/defined3.lua spec/samples/defined2.lua -ud")
+]], get_output "spec/samples/defined3.lua spec/samples/defined2.lua -ud --no-config")
    end)
 
    it("allows ignoring unused defined globals", function()
@@ -397,36 +463,36 @@ Total: 1 warning / 0 errors in 2 files
 Checking spec/samples/defined3.lua                OK
 
 Total: 0 warnings / 0 errors in 1 file
-]], get_output "spec/samples/defined3.lua -d --no-unused-globals")
+]], get_output "spec/samples/defined3.lua -d --ignore 13 --no-config")
 
       assert.equal([[
 Checking spec/samples/defined3.lua                OK
 Checking spec/samples/defined2.lua                OK
 
 Total: 0 warnings / 0 errors in 2 files
-]], get_output "spec/samples/defined3.lua spec/samples/defined2.lua -d --no-unused-globals")
+]], get_output "spec/samples/defined3.lua spec/samples/defined2.lua -d --ignore 13 --no-config")
    end)
 
    it("detects flow issues", function()
       assert.equal([[
-Checking spec/samples/bad_flow.lua                Failure
+Checking spec/samples/bad_flow.lua                6 warnings
 
     spec/samples/bad_flow.lua:1:28: empty if branch
     spec/samples/bad_flow.lua:6:4: empty do..end block
-    spec/samples/bad_flow.lua:12:10: left-hand side of assignment is too long
-    spec/samples/bad_flow.lua:16:10: left-hand side of assignment is too short
+    spec/samples/bad_flow.lua:12:15: left-hand side of assignment is too long
+    spec/samples/bad_flow.lua:16:15: left-hand side of assignment is too short
     spec/samples/bad_flow.lua:21:7: unreachable code
     spec/samples/bad_flow.lua:25:1: loop is executed at most once
 
 Total: 6 warnings / 0 errors in 1 file
-]], get_output "spec/samples/bad_flow.lua")
+]], get_output "spec/samples/bad_flow.lua --no-config")
    end)
 
    it("detects redefinitions", function()
       assert.equal([[
-Checking spec/samples/redefined.lua               Failure
+Checking spec/samples/redefined.lua               6 warnings
 
-    spec/samples/redefined.lua:3:13: unused argument self
+    spec/samples/redefined.lua:3:11: unused argument self
     spec/samples/redefined.lua:4:10: shadowing upvalue a on line 1
     spec/samples/redefined.lua:4:13: variable self is never set
     spec/samples/redefined.lua:4:13: variable self was previously defined as an argument on line 3
@@ -434,12 +500,12 @@ Checking spec/samples/redefined.lua               Failure
     spec/samples/redefined.lua:8:32: shadowing upvalue self on line 4
 
 Total: 6 warnings / 0 errors in 1 file
-]], get_output "spec/samples/redefined.lua --globals each")
+]], get_output "spec/samples/redefined.lua --globals each --no-config")
    end)
 
    it("detects issues related to read-only globals", function()
       assert.equal([[
-Checking spec/samples/read_globals.lua            Failure
+Checking spec/samples/read_globals.lua            5 warnings
 
     spec/samples/read_globals.lua:1:1: setting read-only global variable string
     spec/samples/read_globals.lua:2:1: mutating read-only global variable table
@@ -448,12 +514,12 @@ Checking spec/samples/read_globals.lua            Failure
     spec/samples/read_globals.lua:6:21: accessing undefined variable baz
 
 Total: 5 warnings / 0 errors in 1 file
-]], get_output "spec/samples/read_globals.lua --std=lua52 --globals foo --read-globals bar")
+]], get_output "spec/samples/read_globals.lua --std=lua52 --globals foo --read-globals bar --no-config")
    end)
 
    it("allows showing warning codes", function()
       assert.equal([[
-Checking spec/samples/read_globals.lua            Failure
+Checking spec/samples/read_globals.lua            5 warnings
 
     spec/samples/read_globals.lua:1:1: (W121) setting read-only global variable string
     spec/samples/read_globals.lua:2:1: (W122) mutating read-only global variable table
@@ -462,53 +528,78 @@ Checking spec/samples/read_globals.lua            Failure
     spec/samples/read_globals.lua:6:21: (W113) accessing undefined variable baz
 
 Total: 5 warnings / 0 errors in 1 file
-]], get_output "spec/samples/read_globals.lua --std=lua52 --globals foo --read-globals bar --codes")
+]], get_output "spec/samples/read_globals.lua --std=lua52 --globals foo --read-globals bar --codes --no-config")
+   end)
+
+   it("allows showing token ranges", function()
+      assert.equal([[
+Checking spec/samples/inline_options.lua          8 warnings / 2 errors
+
+    spec/samples/inline_options.lua:6:16-16: unused function f
+    spec/samples/inline_options.lua:12:4-5: accessing undefined variable qu
+    spec/samples/inline_options.lua:15:1-3: accessing undefined variable baz
+    spec/samples/inline_options.lua:24:10-10: unused variable g
+    spec/samples/inline_options.lua:26:7-7: unused variable f
+    spec/samples/inline_options.lua:26:10-10: unused variable g
+    spec/samples/inline_options.lua:28:1-17: unpaired push directive
+    spec/samples/inline_options.lua:30:4-19: unpaired pop directive
+    spec/samples/inline_options.lua:36:1-2: empty do..end block
+    spec/samples/inline_options.lua:37:10-13: empty if branch
+
+Checking spec/samples/python_code.lua             1 error
+
+    spec/samples/python_code.lua:1:6-15: expected '=' near '__future__'
+
+Total: 8 warnings / 3 errors in 2 files
+]], get_output "spec/samples/inline_options.lua spec/samples/python_code.lua --ranges --no-config")
    end)
 
    it("applies inline options", function()
       assert.equal([[
-Checking spec/samples/inline_options.lua          Failure
+Checking spec/samples/inline_options.lua          8 warnings / 2 errors
 
+    spec/samples/inline_options.lua:6:16: unused function f
     spec/samples/inline_options.lua:12:4: accessing undefined variable qu
     spec/samples/inline_options.lua:15:1: accessing undefined variable baz
     spec/samples/inline_options.lua:24:10: unused variable g
     spec/samples/inline_options.lua:26:7: unused variable f
     spec/samples/inline_options.lua:26:10: unused variable g
-    spec/samples/inline_options.lua:28:1: unpaired inline option
-    spec/samples/inline_options.lua:30:4: unpaired inline option
+    spec/samples/inline_options.lua:28:1: unpaired push directive
+    spec/samples/inline_options.lua:30:4: unpaired pop directive
     spec/samples/inline_options.lua:36:1: empty do..end block
     spec/samples/inline_options.lua:37:10: empty if branch
 
-Total: 9 warnings / 0 errors in 1 file
-]], get_output "spec/samples/inline_options.lua --std=none")
+Total: 8 warnings / 2 errors in 1 file
+]], get_output "spec/samples/inline_options.lua --std=none --no-config")
 
       assert.equal([[
-Checking spec/samples/inline_options.lua          Failure
+Checking spec/samples/inline_options.lua          7 warnings / 2 errors
 
+    spec/samples/inline_options.lua:6:16: unused function f
     spec/samples/inline_options.lua:12:4: accessing undefined variable qu
     spec/samples/inline_options.lua:15:1: accessing undefined variable baz
     spec/samples/inline_options.lua:24:10: unused variable g
     spec/samples/inline_options.lua:26:7: unused variable f
     spec/samples/inline_options.lua:26:10: unused variable g
-    spec/samples/inline_options.lua:28:1: unpaired inline option
-    spec/samples/inline_options.lua:30:4: unpaired inline option
+    spec/samples/inline_options.lua:28:1: unpaired push directive
+    spec/samples/inline_options.lua:30:4: unpaired pop directive
     spec/samples/inline_options.lua:36:1: empty do..end block
 
-Total: 8 warnings / 0 errors in 1 file
-]], get_output "spec/samples/inline_options.lua --std=none --ignore=542")
+Total: 7 warnings / 2 errors in 1 file
+]], get_output "spec/samples/inline_options.lua --std=none --ignore=542 --no-config")
 
       assert.equal([[
-Checking spec/samples/global_inline_options.lua   Failure
+Checking spec/samples/global_inline_options.lua   3 warnings
 
     spec/samples/global_inline_options.lua:6:10: unused global variable f
     spec/samples/global_inline_options.lua:7:4: setting non-standard global variable baz
     spec/samples/global_inline_options.lua:18:4: setting non-module global variable external
 
 Total: 3 warnings / 0 errors in 1 file
-]], get_output "spec/samples/global_inline_options.lua --std=lua52")
+]], get_output "spec/samples/global_inline_options.lua --std=lua52 --no-config")
 
       assert.equal([[
-Checking spec/samples/read_globals_inline_options.lua Failure
+Checking spec/samples/read_globals_inline_options.lua 5 warnings
 
     spec/samples/read_globals_inline_options.lua:2:10: accessing undefined variable baz
     spec/samples/read_globals_inline_options.lua:3:1: setting read-only global variable foo
@@ -517,24 +608,36 @@ Checking spec/samples/read_globals_inline_options.lua Failure
     spec/samples/read_globals_inline_options.lua:5:1: setting read-only global variable foo
 
 Total: 5 warnings / 0 errors in 1 file
-]], get_output "spec/samples/read_globals_inline_options.lua --std=lua52")
+]], get_output "spec/samples/read_globals_inline_options.lua --std=lua52 --no-config")
 
       assert.equal([[
-Checking spec/samples/read_globals_inline_options.lua Failure
+Checking spec/samples/read_globals_inline_options.lua 1 warning
 
     spec/samples/read_globals_inline_options.lua:3:16: mutating read-only global variable baz
 
 Total: 1 warning / 0 errors in 1 file
-]], get_output "spec/samples/read_globals_inline_options.lua --std=lua52 --read-globals baz --globals foo")
+]], get_output "spec/samples/read_globals_inline_options.lua --std=lua52 --read-globals baz --globals foo --no-config")
+   end)
+
+   it("inline options can use extended stds", function()
+      assert.equal([[
+Checking spec/samples/custom_std_inline_options.lua 2 warnings
+
+    spec/samples/custom_std_inline_options.lua:3:1: accessing undefined variable tostring
+    spec/samples/custom_std_inline_options.lua:6:25: accessing undefined variable it
+
+Total: 2 warnings / 0 errors in 1 file
+]], get_output "spec/samples/custom_std_inline_options.lua --config=spec/configs/custom_stds_config.luacheckrc")
    end)
 
    it("inline options can be disabled", function()
       assert.equal([[
-Checking spec/samples/inline_options.lua          Failure
+Checking spec/samples/inline_options.lua          26 warnings
 
     spec/samples/inline_options.lua:3:1: accessing undefined variable foo
     spec/samples/inline_options.lua:4:1: accessing undefined variable bar
     spec/samples/inline_options.lua:6:16: unused function f
+    spec/samples/inline_options.lua:6:18: unused argument a
     spec/samples/inline_options.lua:8:4: accessing undefined variable foo
     spec/samples/inline_options.lua:9:4: accessing undefined variable bar
     spec/samples/inline_options.lua:10:4: accessing undefined variable baz
@@ -558,8 +661,8 @@ Checking spec/samples/inline_options.lua          Failure
     spec/samples/inline_options.lua:36:1: empty do..end block
     spec/samples/inline_options.lua:37:10: empty if branch
 
-Total: 25 warnings / 0 errors in 1 file
-]], get_output "spec/samples/inline_options.lua --std=none --no-inline")
+Total: 26 warnings / 0 errors in 1 file
+]], get_output "spec/samples/inline_options.lua --std=none --no-inline --no-config")
    end)
 
    describe("caching", function()
@@ -576,7 +679,7 @@ Total: 25 warnings / 0 errors in 1 file
       it("caches results", function()
          assert.equal([[
 Checking spec/samples/good_code.lua               OK
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                5 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -584,12 +687,12 @@ Checking spec/samples/bad_code.lua                Failure
     spec/samples/bad_code.lua:8:10: variable opt was previously defined as an argument on line 7
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
-Checking spec/samples/python_code.lua             Syntax error
+Checking spec/samples/python_code.lua             1 error
 
     spec/samples/python_code.lua:1:6: expected '=' near '__future__'
 
 Total: 5 warnings / 1 error in 3 files
-]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --cache "..tmpname))
+]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --no-config --cache "..tmpname))
 
          local cache = utils.read_file(tmpname)
          assert.string(cache)
@@ -598,10 +701,10 @@ Total: 5 warnings / 1 error in 3 files
 return {}
 spec/samples/bad_code.lua
 (%d+)
-local A="113";return {{A,"package",1,1},{"211","helper",3,16,%[8%]=true},{"212","...",3,23,%[9%]=true},{"111","embrace",7,10,%[11%]=true},{"412","opt",8,10,7,18},{A,"hepler",9,11}}
+local A="113";return {{A,"package",1,1},{"211","helper",3,16,%[9%]=true},{"212","...",3,23},{"111","embrace",7,10,%[11%]=true},{"412","opt",8,10,7,18},{A,"hepler",9,11}}
 spec/samples/python_code.lua
 (%d+)
-return {1,6,6,"expected '=' near '__future__'"}
+return {{"011",%[3%]=1,%[4%]=6,%[24%]="expected '=' near '__future__'"}}
 ]])
          assert.string(good_mtime)
          assert.string(bad_mtime)
@@ -609,7 +712,7 @@ return {1,6,6,"expected '=' near '__future__'"}
 
          assert.equal([[
 Checking spec/samples/good_code.lua               OK
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                5 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -617,12 +720,12 @@ Checking spec/samples/bad_code.lua                Failure
     spec/samples/bad_code.lua:8:10: variable opt was previously defined as an argument on line 7
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
-Checking spec/samples/python_code.lua             Syntax error
+Checking spec/samples/python_code.lua             1 error
 
     spec/samples/python_code.lua:1:6: expected '=' near '__future__'
 
 Total: 5 warnings / 1 error in 3 files
-]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --cache "..tmpname))
+]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --no-config --cache "..tmpname))
 
          local fh = io.open(tmpname, "w")
          assert.userdata(fh)
@@ -631,18 +734,18 @@ Total: 5 warnings / 1 error in 3 files
 return {{"111", "global", 1, 1}, {"321", "uninit", 6, 8}}
 spec/samples/good_code.lua
 %s
-return {5, 7, 7, "this code is actually bad"}
+return {{"011",[3]=5,[4]=7,[24]="this code is actually bad"}}
 spec/samples/bad_code.lua
 %s
 return {}]]):format(python_mtime, good_mtime, tostring(tonumber(bad_mtime) - 1)))
          fh:close()
 
          assert.equal([[
-Checking spec/samples/good_code.lua               Syntax error
+Checking spec/samples/good_code.lua               1 error
 
     spec/samples/good_code.lua:5:7: this code is actually bad
 
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                5 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -650,12 +753,12 @@ Checking spec/samples/bad_code.lua                Failure
     spec/samples/bad_code.lua:8:10: variable opt was previously defined as an argument on line 7
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
-Checking spec/samples/python_code.lua             Failure
+Checking spec/samples/python_code.lua             2 warnings
 
     spec/samples/python_code.lua:1:1: setting non-standard global variable global
     spec/samples/python_code.lua:6:8: accessing uninitialized variable uninit
 
-Checking spec/samples/unused_code.lua             Failure
+Checking spec/samples/unused_code.lua             9 warnings
 
     spec/samples/unused_code.lua:3:18: unused argument baz
     spec/samples/unused_code.lua:4:8: unused loop variable i
@@ -668,7 +771,7 @@ Checking spec/samples/unused_code.lua             Failure
     spec/samples/unused_code.lua:21:7: variable z is never accessed
 
 Total: 16 warnings / 1 error in 4 files
-]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua spec/samples/unused_code.lua --std=lua52 --cache "..tmpname))
+]], get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua spec/samples/unused_code.lua --std=lua52 --no-config --cache "..tmpname))
       end)
    end)
 
@@ -678,7 +781,7 @@ Total: 16 warnings / 1 error in 4 files
       it("uses multithreading", function()
          assert.equal([[
 Checking spec/samples/good_code.lua               OK
-Checking spec/samples/bad_code.lua                Failure
+Checking spec/samples/bad_code.lua                5 warnings
 
     spec/samples/bad_code.lua:3:16: unused function helper
     spec/samples/bad_code.lua:3:23: unused variable length argument
@@ -686,12 +789,12 @@ Checking spec/samples/bad_code.lua                Failure
     spec/samples/bad_code.lua:8:10: variable opt was previously defined as an argument on line 7
     spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
 
-Checking spec/samples/python_code.lua             Syntax error
+Checking spec/samples/python_code.lua             1 error
 
     spec/samples/python_code.lua:1:6: expected '=' near '__future__'
 
 Total: 5 warnings / 1 error in 3 files
-]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 -j2")
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 -j2 --no-config")
       end)
    end
 
@@ -701,7 +804,16 @@ Formatter: spec.formatters.custom_formatter
 Quiet: 1
 Color: false
 Codes: true
-]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --formatter spec.formatters.custom_formatter -q --codes --no-color")
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --formatter spec.formatters.custom_formatter -q --codes --no-color --no-config")
+   end)
+
+   it("loads custom formatters relatively to project root", function()
+      assert.equal([[Files: 2
+Formatter: spec.formatters.custom_formatter
+Quiet: 1
+Color: false
+Codes: true
+]], get_output("samples/good_code.lua samples/bad_code.lua --formatter spec.formatters.custom_formatter -q --codes --no-color --no-config", "spec/"))
    end)
 
    it("has built-in TAP formatter", function()
@@ -714,7 +826,7 @@ not ok 4 spec/samples/bad_code.lua:7:10: setting non-standard global variable 'e
 not ok 5 spec/samples/bad_code.lua:8:10: variable 'opt' was previously defined as an argument on line 7
 not ok 6 spec/samples/bad_code.lua:9:11: accessing undefined variable 'hepler'
 not ok 7 spec/samples/python_code.lua:1:6: expected '=' near '__future__'
-]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --formatter TAP")
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --formatter TAP --no-config")
 
       assert.equal([[
 1..7
@@ -724,31 +836,39 @@ not ok 3 spec/samples/bad_code.lua:3:23: (W212) unused variable length argument
 not ok 4 spec/samples/bad_code.lua:7:10: (W111) setting non-standard global variable 'embrace'
 not ok 5 spec/samples/bad_code.lua:8:10: (W412) variable 'opt' was previously defined as an argument on line 7
 not ok 6 spec/samples/bad_code.lua:9:11: (W113) accessing undefined variable 'hepler'
-not ok 7 spec/samples/python_code.lua:1:6: expected '=' near '__future__'
-]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --formatter TAP --codes")
+not ok 7 spec/samples/python_code.lua:1:6: (E011) expected '=' near '__future__'
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --formatter TAP --codes --no-config")
    end)
 
    it("has built-in JUnit formatter", function()
       assert.equal([[
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="Luacheck report" tests="3">
+<testsuite name="Luacheck report" tests="7">
     <testcase name="spec/samples/good_code.lua" classname="spec/samples/good_code.lua"/>
-    <testcase name="spec/samples/bad_code.lua" classname="spec/samples/bad_code.lua">
+    <testcase name="spec/samples/bad_code.lua:1" classname="spec/samples/bad_code.lua">
         <failure type="W211" message="spec/samples/bad_code.lua:3:16: unused function 'helper'"/>
+    </testcase>
+    <testcase name="spec/samples/bad_code.lua:2" classname="spec/samples/bad_code.lua">
         <failure type="W212" message="spec/samples/bad_code.lua:3:23: unused variable length argument"/>
+    </testcase>
+    <testcase name="spec/samples/bad_code.lua:3" classname="spec/samples/bad_code.lua">
         <failure type="W111" message="spec/samples/bad_code.lua:7:10: setting non-standard global variable 'embrace'"/>
+    </testcase>
+    <testcase name="spec/samples/bad_code.lua:4" classname="spec/samples/bad_code.lua">
         <failure type="W412" message="spec/samples/bad_code.lua:8:10: variable 'opt' was previously defined as an argument on line 7"/>
+    </testcase>
+    <testcase name="spec/samples/bad_code.lua:5" classname="spec/samples/bad_code.lua">
         <failure type="W113" message="spec/samples/bad_code.lua:9:11: accessing undefined variable 'hepler'"/>
     </testcase>
-    <testcase name="spec/samples/python_code.lua" classname="spec/samples/python_code.lua">
-        <error type="Syntax error" message="spec/samples/python_code.lua:1:6: expected '=' near '__future__'"/>
+    <testcase name="spec/samples/python_code.lua:1" classname="spec/samples/python_code.lua">
+        <failure type="E011" message="spec/samples/python_code.lua:1:6: expected '=' near '__future__'"/>
     </testcase>
 </testsuite>
-]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --formatter JUnit")
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --formatter JUnit --no-config")
    end)
 
    it("has built-in simple warning-per-line formatter", function()
-      assert.equal("", get_output "spec/samples/good_code.lua --std=lua52 --formatter plain")
+      assert.equal("", get_output "spec/samples/good_code.lua --std=lua52 --formatter plain --no-config")
 
       assert.equal([[
 spec/samples/bad_code.lua:3:16: unused function 'helper'
@@ -757,7 +877,11 @@ spec/samples/bad_code.lua:7:10: setting non-standard global variable 'embrace'
 spec/samples/bad_code.lua:8:10: variable 'opt' was previously defined as an argument on line 7
 spec/samples/bad_code.lua:9:11: accessing undefined variable 'hepler'
 spec/samples/python_code.lua:1:6: expected '=' near '__future__'
-]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --formatter plain")
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --formatter plain --no-config")
+
+      assert.equal([[
+spec/samples/404.lua: I/O error
+]], get_output "spec/samples/404.lua --formatter plain --no-config")
 
       assert.equal([[
 spec/samples/bad_code.lua:3:16: (W211) unused function 'helper'
@@ -765,8 +889,8 @@ spec/samples/bad_code.lua:3:23: (W212) unused variable length argument
 spec/samples/bad_code.lua:7:10: (W111) setting non-standard global variable 'embrace'
 spec/samples/bad_code.lua:8:10: (W412) variable 'opt' was previously defined as an argument on line 7
 spec/samples/bad_code.lua:9:11: (W113) accessing undefined variable 'hepler'
-spec/samples/python_code.lua:1:6: expected '=' near '__future__'
-]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --formatter plain --codes")
+spec/samples/python_code.lua:1:6: (E011) expected '=' near '__future__'
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --formatter plain --codes --no-config")
    end)
 
    it("provides version info", function()
@@ -775,7 +899,278 @@ spec/samples/python_code.lua:1:6: expected '=' near '__future__'
    end)
 
    it("expands folders", function()
-      local output = get_output "spec/samples -qqq"
-      assert.truthy(output:match("^Total: %d+ warnings / 1 error in 19 files\n$"))
+      assert.matches("^Total: %d+ warnings / %d+ errors in 20 files\n$", get_output "spec/samples -qqq --no-config")
+   end)
+
+   describe("config", function()
+      describe("loading", function()
+         it("uses .luacheckrc in current directory if possible", function()
+            assert.equal([[
+Checking nested/ab.lua                            1 warning
+
+    nested/ab.lua:1:10: accessing undefined variable b
+
+Checking nested/nested/abc.lua                    2 warnings
+
+    nested/nested/abc.lua:1:7: accessing undefined variable a
+    nested/nested/abc.lua:1:13: accessing undefined variable c
+
+Total: 3 warnings / 0 errors in 2 files
+]], get_output("nested", "spec/configs/project/"))
+         end)
+
+         it("does not use .luacheckrc in current directory with --no-config", function()
+            assert.equal([[
+Checking nested/ab.lua                            2 warnings
+
+    nested/ab.lua:1:7: accessing undefined variable a
+    nested/ab.lua:1:10: accessing undefined variable b
+
+Checking nested/nested/abc.lua                    3 warnings
+
+    nested/nested/abc.lua:1:7: accessing undefined variable a
+    nested/nested/abc.lua:1:10: accessing undefined variable b
+    nested/nested/abc.lua:1:13: accessing undefined variable c
+
+Total: 5 warnings / 0 errors in 2 files
+]], get_output("nested --no-config", "spec/configs/project/"))
+         end)
+
+         it("uses .luacheckrc in upper directory", function()
+            assert.equal([[
+Checking ab.lua                                   1 warning
+
+    ab.lua:1:10: accessing undefined variable b
+
+Checking nested/abc.lua                           2 warnings
+
+    nested/abc.lua:1:7: accessing undefined variable a
+    nested/abc.lua:1:13: accessing undefined variable c
+
+Total: 3 warnings / 0 errors in 2 files
+]], get_output("ab.lua nested", "spec/configs/project/nested/"))
+         end)
+
+         it("uses config provided with --config=path", function()
+            assert.equal([[
+Checking spec/samples/compat.lua                  OK
+
+Total: 0 warnings / 0 errors in 1 file
+]], get_output "spec/samples/compat.lua --config=spec/configs/global_config.luacheckrc")
+         end)
+
+         it("uses config when checking stdin", function()
+            assert.equal([[
+Checking stdin                                    OK
+
+Total: 0 warnings / 0 errors in 1 file
+]], get_output "- --config=spec/configs/global_config.luacheckrc < spec/samples/compat.lua")
+         end)
+
+         it("uses per-file overrides", function()
+            assert.equal([[
+Checking spec/samples/bad_code.lua                4 warnings
+
+    spec/samples/bad_code.lua:3:16: unused function helper
+    spec/samples/bad_code.lua:3:23: unused variable length argument
+    spec/samples/bad_code.lua:7:10: setting non-standard global variable embrace
+    spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
+
+Checking spec/samples/unused_code.lua             OK
+
+Total: 4 warnings / 0 errors in 2 files
+]], get_output "spec/samples/bad_code.lua spec/samples/unused_code.lua --config=spec/configs/override_config.luacheckrc")
+         end)
+
+         it("uses new filename when selecting per-file overrides", function()
+            assert.equal([[
+Checking spec/samples/unused_code.lua             OK
+
+Total: 0 warnings / 0 errors in 1 file
+]], get_output "- --config=spec/configs/override_config.luacheckrc --filename spec/samples/unused_code.lua < spec/samples/unused_code.lua")
+         end)
+
+         it("uses all overrides prefixing file name", function()
+            assert.equal([[
+Checking spec/samples/unused_secondaries.lua      1 warning
+
+    spec/samples/unused_secondaries.lua:12:1: value assigned to variable o is unused
+
+Checking spec/samples/unused_code.lua             7 warnings
+
+    spec/samples/unused_code.lua:3:18: unused argument baz
+    spec/samples/unused_code.lua:4:8: unused loop variable i
+    spec/samples/unused_code.lua:7:11: unused loop variable a
+    spec/samples/unused_code.lua:7:14: unused loop variable b
+    spec/samples/unused_code.lua:7:17: unused loop variable c
+    spec/samples/unused_code.lua:13:7: value assigned to variable x is unused
+    spec/samples/unused_code.lua:14:1: value assigned to variable x is unused
+
+Total: 8 warnings / 0 errors in 2 files
+]], get_output "spec/samples/unused_secondaries.lua spec/samples/unused_code.lua --config=spec/configs/multioverride_config.luacheckrc")
+         end)
+
+         it("allows reenabling warnings ignored in config using --enable", function()
+            assert.equal([[
+Checking spec/samples/bad_code.lua                4 warnings
+
+    spec/samples/bad_code.lua:3:16: unused function helper
+    spec/samples/bad_code.lua:3:23: unused variable length argument
+    spec/samples/bad_code.lua:7:10: setting non-standard global variable embrace
+    spec/samples/bad_code.lua:9:11: accessing undefined variable hepler
+
+Checking spec/samples/unused_code.lua             1 warning
+
+    spec/samples/unused_code.lua:5:13: unused variable q
+
+Total: 5 warnings / 0 errors in 2 files
+]], get_output "spec/samples/bad_code.lua spec/samples/unused_code.lua --config=spec/configs/override_config.luacheckrc --enable=211")
+         end)
+
+         it("allows using cli-specific options in top level config", function()
+            assert.equal([[Files: 2
+Warnings: 14
+Errors: 0
+Quiet: 0
+Color: false
+Codes: true
+]], get_output "spec/samples/bad_code.lua spec/samples/unused_code.lua --config=spec/configs/cli_specific_config.luacheckrc --std=lua52")
+         end)
+
+         it("uses exclude_files option", function()
+            assert.equal([[
+Checking spec/samples/argparse.lua                6 warnings
+Checking spec/samples/compat.lua                  4 warnings
+Checking spec/samples/custom_std_inline_options.lua 3 warnings / 1 error
+Checking spec/samples/global_inline_options.lua   3 warnings
+Checking spec/samples/globals.lua                 2 warnings
+Checking spec/samples/inline_options.lua          7 warnings / 2 errors
+Checking spec/samples/python_code.lua             1 error
+Checking spec/samples/read_globals.lua            5 warnings
+Checking spec/samples/read_globals_inline_options.lua 3 warnings
+Checking spec/samples/redefined.lua               7 warnings
+Checking spec/samples/unused_code.lua             9 warnings
+Checking spec/samples/unused_secondaries.lua      4 warnings
+
+Total: 53 warnings / 4 errors in 14 files
+]], get_output "spec/samples --config=spec/configs/exclude_files_config.luacheckrc -qq")
+         end)
+
+         it("loads exclude_files option correctly from upper directory", function()
+            assert.equal([[
+Checking argparse.lua                             6 warnings
+Checking compat.lua                               4 warnings
+Checking custom_std_inline_options.lua            3 warnings / 1 error
+Checking global_inline_options.lua                3 warnings
+Checking globals.lua                              2 warnings
+Checking inline_options.lua                       7 warnings / 2 errors
+Checking python_code.lua                          1 error
+Checking read_globals.lua                         5 warnings
+Checking read_globals_inline_options.lua          3 warnings
+Checking redefined.lua                            7 warnings
+Checking unused_code.lua                          9 warnings
+Checking unused_secondaries.lua                   4 warnings
+
+Total: 53 warnings / 4 errors in 14 files
+]], get_output(". --config=spec/configs/exclude_files_config.luacheckrc -qq", "spec/samples/"))
+         end)
+
+         it("combines excluded files from config and cli", function()
+            assert.equal([[
+Checking argparse.lua                             6 warnings
+Checking compat.lua                               4 warnings
+Checking custom_std_inline_options.lua            3 warnings / 1 error
+Checking global_inline_options.lua                3 warnings
+Checking globals.lua                              2 warnings
+Checking inline_options.lua                       7 warnings / 2 errors
+Checking python_code.lua                          1 error
+Checking redefined.lua                            7 warnings
+Checking unused_code.lua                          9 warnings
+Checking unused_secondaries.lua                   4 warnings
+
+Total: 45 warnings / 4 errors in 12 files
+]], get_output(". --config=spec/configs/exclude_files_config.luacheckrc -qq --exclude-files './read*'", "spec/samples/"))
+         end)
+
+         it("allows defining custom stds", function()
+            assert.equal([[
+Checking spec/samples/globals.lua                 2 warnings
+
+    spec/samples/globals.lua:1:15: accessing undefined variable rawlen
+    spec/samples/globals.lua:1:22: accessing undefined variable tostring
+
+Total: 2 warnings / 0 errors in 1 file
+]], get_output "spec/samples/globals.lua --config=spec/configs/custom_stds_config.luacheckrc")
+
+            assert.equal([[
+Checking spec/samples/globals.lua                 2 warnings
+
+    spec/samples/globals.lua:1:1: accessing undefined variable print
+    spec/samples/globals.lua:1:15: accessing undefined variable rawlen
+
+Total: 2 warnings / 0 errors in 1 file
+]], get_output "spec/samples/globals.lua --config=spec/configs/custom_stds_config.luacheckrc --std=other_std")
+
+            assert.equal([[
+Checking spec/samples/globals.lua                 1 warning
+
+    spec/samples/globals.lua:1:15: accessing undefined variable rawlen
+
+Total: 1 warning / 0 errors in 1 file
+]], get_output "spec/samples/globals.lua --config=spec/configs/custom_stds_config.luacheckrc --std=+other_std")
+
+            assert.equal([[
+Checking spec/samples/globals.lua                 1 warning
+
+    spec/samples/globals.lua:1:7: accessing undefined variable setfenv
+
+Total: 1 warning / 0 errors in 1 file
+]], get_output "spec/samples/globals.lua --config=spec/configs/custom_stds_config.luacheckrc --std=lua52")
+         end)
+
+         it("allows importing options with require", function()
+            assert.equal([[
+Checking spec/samples/globals.lua                 1 warning
+
+    spec/samples/globals.lua:1:7: (W113) accessing undefined variable setfenv
+
+Total: 1 warning / 0 errors in 1 file
+]], get_output "spec/samples/globals.lua --config=spec/configs/import_config.luacheckrc")
+         end)
+      end)
+
+      describe("error handling", function()
+         it("raises critical error on config with syntax errors", function()
+            assert.equal([[
+Critical error: Couldn't load configuration from spec/configs/bad_config.luacheckrc: syntax error
+]], get_output "spec/samples/empty.lua --config=spec/configs/bad_config.luacheckrc")
+            assert.equal(3, get_exitcode "spec/samples/empty.lua --config=spec/configs/bad_config.luacheckrc")
+         end)
+
+         it("raises critical error on non-existent config", function()
+            assert.equal([[
+Critical error: Couldn't find configuration file spec/configs/config_404.luacheckrc
+]], get_output "spec/samples/empty.lua --config=spec/configs/config_404.luacheckrc")
+            assert.equal(3, get_exitcode "spec/samples/empty.lua --config=spec/configs/config_404.luacheckrc")
+         end)
+      end)
+
+      describe("overwriting", function()
+         it("prioritizes CLI options over config", function()
+            assert.equal(1, get_exitcode "spec/samples/compat.lua --config=spec/configs/cli_override_config.luacheckrc --new-globals foo")
+         end)
+
+         it("prioritizes CLI options over config overrides", function()
+            assert.equal(1, get_exitcode "spec/samples/compat.lua --config=spec/configs/cli_override_file_config.luacheckrc --new-globals foo")
+         end)
+
+         it("concats array-like options from config and CLI", function()
+            assert.equal([[
+Checking spec/samples/globals.lua                 OK
+
+Total: 0 warnings / 0 errors in 1 file
+]], get_output "spec/samples/globals.lua --config=spec/configs/global_config.luacheckrc --globals tostring")
+         end)
+      end)
    end)
 end)

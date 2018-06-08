@@ -3,59 +3,83 @@ local utils = {}
 utils.dir_sep = package.config:sub(1,1)
 utils.is_windows = utils.dir_sep == "\\"
 
--- Returns all contents of file(path or file handler) or nil. 
-function utils.read_file(file)
-   local res
+local bom = "\239\187\191"
 
-   return pcall(function()
-      local handler = type(file) == "string" and io.open(file, "rb") or file
-      res = assert(handler:read("*a"))
-      handler:close()
-   end) and res or nil
+-- Returns all contents of file (path or file handler) or nil. 
+function utils.read_file(file)
+   local handler
+
+   if type(file) == "string" then
+      handler = io.open(file, "rb")
+
+      if not handler then
+         return nil
+      end
+   else
+      handler = file
+   end
+
+   local res = handler:read("*a")
+   handler:close()
+
+   -- Use :len() instead of # operator because in some environments
+   -- string library is patched to handle UTF.
+   if res and res:sub(1, bom:len()) == bom then
+      res = res:sub(bom:len() + 1)
+   end
+
+   return res
 end
 
 -- luacheck: push
 -- luacheck: compat
 if _VERSION:find "5.1" then
-   -- Loads Lua source string in an environment, returns function or nil.
-   function utils.load(src, env)
-      local func = loadstring(src)
+   -- Loads Lua source string in an environment, returns function or nil, error.
+   function utils.load(src, env, chunkname)
+      local func, err = loadstring(src, chunkname)
 
       if func then
-         return setfenv(func, env)
+         if env then
+            setfenv(func, env)
+         end
+
+         return func
+      else
+         return nil, err
       end
    end
 else
-   -- Loads Lua source string in an environment, returns function or nil.
-   function utils.load(src, env)
-      return load(src, nil, "t", env)
+   -- Loads Lua source string in an environment, returns function or nil, error.
+   function utils.load(src, env, chunkname)
+      return load(src, chunkname, "t", env or _ENV)
    end
 end
 -- luacheck: pop
 
--- Parses rockspec-like source, returns data or nil. 
-local function capture_env(src, env)
-   env = env or {}
-   local func = utils.load(src, env)
-   return func and pcall(func) and env
-end
-
 -- Loads config containing assignments to global variables from path. 
--- Returns config table or nil and error message("I/O" or "syntax"). 
+-- Returns config table and return value of config or nil and error message
+-- ("I/O" or "syntax" or "runtime"). 
 function utils.load_config(path, env)
+   env = env or {}
    local src = utils.read_file(path)
 
    if not src then
       return nil, "I/O"
    end
 
-   local cfg = capture_env(src, env)
+   local func = utils.load(src, env)
 
-   if not cfg then
+   if not func then
       return nil, "syntax"
    end
 
-   return cfg
+   local ok, res = pcall(func)
+
+   if not ok then
+      return nil, "runtime"
+   end
+
+   return env, res
 end
 
 function utils.array_to_set(array)
@@ -198,6 +222,23 @@ function utils.split(str, sep)
    return parts
 end
 
+-- Behaves like string.match, except it normally returns boolean and
+-- throws a table {pattern = pattern} on invalid pattern.
+-- The error message turns into original error when tostring is used on it,
+-- to ensure behaviour is predictable when luacheck is used as a module.
+function utils.pmatch(str, pattern)
+   assert(type(str) == "string")
+   assert(type(pattern) == "string")
+
+   local ok, res = pcall(string.match, str, pattern)
+
+   if not ok then
+      error(setmetatable({pattern = pattern}, {__tostring = function() return res end}))
+   else
+      return not not res
+   end
+end
+
 -- Maps func over array.
 function utils.map(func, array)
    local res = {}
@@ -207,6 +248,38 @@ function utils.map(func, array)
    end
 
    return res
+end
+
+-- Returns predicate checking type.
+function utils.has_type(type_)
+   return function(x)
+      return type(x) == type_
+   end
+end
+
+-- Returns predicate checking that value is an array with
+-- elements of type.
+function utils.array_of(type_)
+   return function(x)
+      if type(x) ~= "table" then
+         return false
+      end
+
+      for _, item in ipairs(x) do
+         if type(item) ~= type_ then
+            return false
+         end
+      end
+
+      return true
+   end
+end
+
+-- Returns predicate chacking if value satisfies on of predicates.
+function utils.either(pred1, pred2)
+   return function(x)
+      return pred1(x) or pred2(x)
+   end
 end
 
 return utils

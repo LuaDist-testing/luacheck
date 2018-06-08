@@ -16,7 +16,11 @@ function ChState:__init()
    self.warnings = {}
 end
 
-function ChState:warn(warning)
+function ChState:warn(warning, implicit_self)
+   if not warning.end_column then
+      warning.end_column = implicit_self and warning.column or (warning.column + #warning.name - 1)
+   end
+
    table.insert(self.warnings, warning)
 end
 
@@ -30,7 +34,6 @@ local type_codes = {
    var = 1,
    func = 1,
    arg = 2,
-   vararg = 2,
    loop = 3,
    loopi = 3
 }
@@ -55,8 +58,8 @@ function ChState:warn_unused_variable(var)
       column = var.location.column,
       secondary = is_secondary(var.values[1]) or nil,
       func = (var.values[1].type == "func") or nil,
-      vararg = (var.type == "vararg") or nil
-   })
+      self = var.self
+   }, var.self)
 end
 
 function ChState:warn_unset(var)
@@ -86,7 +89,7 @@ function ChState:warn_unaccessed(var)
       line = var.location.line,
       column = var.location.column,
       secondary = secondary
-   })
+   }, var.self)
 end
 
 function ChState:warn_unused_value(value)
@@ -96,7 +99,7 @@ function ChState:warn_unused_value(value)
       line = value.location.line,
       column = value.location.column,
       secondary = is_secondary(value) or nil
-   })
+   }, value.type == "arg" and value.var.self)
 end
 
 function ChState:warn_uninit(node)
@@ -115,17 +118,19 @@ function ChState:warn_redefined(var, prev_var, same_scope)
          name = var.name,
          line = var.location.line,
          column = var.location.column,
+         self = var.self and prev_var.self,
          prev_line = prev_var.location.line,
          prev_column = prev_var.location.column
-      })
+      }, var.self)
    end
 end
 
-function ChState:warn_unreachable(location, unrepeatable)
+function ChState:warn_unreachable(location, unrepeatable, token)
    self:warn({
       code = "51" .. (unrepeatable and "2" or "1"),
       line = location.line,
-      column = location.column
+      column = location.column,
+      end_column = location.column + #token - 1
    })
 end
 
@@ -134,30 +139,32 @@ function ChState:warn_unused_label(label)
       code = "521",
       name = label.name,
       line = label.location.line,
-      column = label.location.column
+      column = label.location.column,
+      end_column = label.end_column
    })
 end
 
 function ChState:warn_unbalanced(location, shorter_lhs)
+   -- Location points to `=`.
    self:warn({
       code = "53" .. (shorter_lhs and "1" or "2"),
       line = location.line,
-      column = location.column
+      column = location.column,
+      end_column = location.column
    })
 end
 
 function ChState:warn_empty_block(location, do_end)
+   -- Location points to `do`, `then` or `else`.
    self:warn({
       code = "54" .. (do_end and "1" or "2"),
       line = location.line,
-      column = location.column
+      column = location.column,
+      end_column = location.column + (do_end and 1 or 3)
    })
 end
 
---- Checks source.
--- Returns an array of warnings.
--- Raises {line = line, column = column, offset = offset, msg = msg} on syntax errors.
-local function check(src)
+local function check_or_throw(src)
    local ast, comments, code_lines = parse(src)
    local chstate = ChState()
    local line = linearize(chstate, ast)
@@ -166,6 +173,27 @@ local function check(src)
    handle_inline_options(ast, comments, code_lines, chstate.warnings)
    core_utils.sort_by_location(chstate.warnings)
    return chstate.warnings
+end
+
+--- Checks source.
+-- Returns an array of warnings and errors. Codes for errors start with "0".
+-- Syntax errors (with code "011") have message stored in .msg field.
+local function check(src)
+   local warnings, err = utils.pcall(check_or_throw, src)
+
+   if warnings then
+      return warnings
+   else
+      local syntax_error = {
+         code = "011",
+         line = err.line,
+         column = err.column,
+         end_column = err.end_column,
+         msg = err.msg
+      }
+
+      return {syntax_error}
+   end
 end
 
 return check

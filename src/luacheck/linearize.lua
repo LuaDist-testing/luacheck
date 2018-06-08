@@ -26,7 +26,8 @@ local function new_var(line, node, type_)
    return {
       name = node[1],
       location = node.location,
-      type = (node[1] == "...") and "vararg" or type_,
+      type = type_,
+      self = node.implicit,
       line = line,
       scope_start = line.items.size + 1,
       values = {}
@@ -43,10 +44,11 @@ local function new_value(var_node, value_node, is_init)
    }
 end
 
-local function new_label(line, name, location)
+local function new_label(line, name, location, end_column)
    return {
       name = name,
       location = location,
+      end_column = end_column,
       index = line.items.size + 1
    }
 end
@@ -70,38 +72,42 @@ local function new_eval_item(expr)
       tag = "Eval",
       expr = expr,
       location = expr.location,
+      token = expr.first_token,
       accesses = {},
       used_values = {},
       lines = {}
    }
 end
 
-local function new_noop_item(location, loop_end)
+local function new_noop_item(node, loop_end)
    return {
       tag = "Noop",
-      location = location,
+      location = node.location,
+      token = node.first_token,
       loop_end = loop_end
    }
 end
 
-local function new_local_item(lhs, rhs, location)
+local function new_local_item(lhs, rhs, location, token)
    return {
       tag = "Local",
       lhs = lhs,
       rhs = rhs,
       location = location,
+      token = token,
       accesses = rhs and {},
       used_values = rhs and {},
       lines = rhs and {}
    }
 end
 
-local function new_set_item(lhs, rhs, location)
+local function new_set_item(lhs, rhs, location, token)
    return {
       tag = "Set",
       lhs = lhs,
       rhs = rhs,
       location = location,
+      token = token,
       accesses = {},
       used_values = {},
       lines = {}
@@ -136,9 +142,11 @@ function LinState:leave_scope()
          label.used = true
       else
          if not prev_scope or prev_scope.line ~= self.lines.top then
-            local err_msg = (goto_.name == "break" and "'break' is not inside a loop" or
-               "no visible label '%s'"):format(goto_.name)
-            lexer.syntax_error(goto_.location.line, goto_.location.column, goto_.location.offset, err_msg)
+            if goto_.name == "break" then
+               lexer.syntax_error(goto_.location, goto_.location.column + 4, "'break' is not inside a loop")
+            else
+               lexer.syntax_error(goto_.location, goto_.location.column + 3, ("no visible label '%s'"):format(goto_.name))
+            end
          end
 
          table.insert(prev_scope.gotos, goto_)
@@ -202,23 +210,23 @@ function LinState:check_var(node, action)
    return var
 end
 
-function LinState:register_label(name, location)
+function LinState:register_label(name, location, end_column)
    if self.scopes.top.labels[name] then
       assert(not pseudo_labels[name])
-      lexer.syntax_error(location.line, location.column, location.offset,
-         ("label '%s' already defined on line %d"):format(name, self.scopes.top.labels[name].location.line))
+      lexer.syntax_error(location, end_column, ("label '%s' already defined on line %d"):format(
+         name, self.scopes.top.labels[name].location.line))
    end
 
-   self.scopes.top.labels[name] = new_label(self.lines.top, name, location)
+   self.scopes.top.labels[name] = new_label(self.lines.top, name, location, end_column)
 end
 
 -- `node` is assignment node (`Local or `Set).
 function LinState:check_balance(node)
    if node[2] then
       if #node[1] < #node[2] then
-         self.chstate:warn_unbalanced(node.location, true)
+         self.chstate:warn_unbalanced(node.equals_location, true)
       elseif (#node[1] > #node[2]) and node.tag ~= "Local" and not is_unpacking(node[2][#node[2]]) then
-         self.chstate:warn_unbalanced(node.location)
+         self.chstate:warn_unbalanced(node.equals_location)
       end
    end
 end
@@ -239,8 +247,8 @@ function LinState:emit_goto(name, is_conditional, location)
    table.insert(self.scopes.top.gotos, new_goto(name, jump, location))
 end
 
-function LinState:emit_noop(location, loop_end)
-   self:emit(new_noop_item(location, loop_end))
+function LinState:emit_noop(node, loop_end)
+   self:emit(new_noop_item(node, loop_end))
 end
 
 function LinState:emit_stmt(stmt)
@@ -261,25 +269,25 @@ end
 
 function LinState:emit_stmt_Do(node)
    self:check_empty_block(node)
-   self:emit_noop(node.location)
+   self:emit_noop(node)
    self:emit_block(node)
 end
 
 function LinState:emit_stmt_While(node)
-   self:emit_noop(node.location)
+   self:emit_noop(node)
    self:enter_scope()
    self:register_label("do")
    self:emit_expr(node[1])
    self:emit_goto("break", true)
    self:emit_block(node[2])
-   self:emit_noop(node.location, true)
+   self:emit_noop(node, true)
    self:emit_goto("do")
    self:register_label("break")
    self:leave_scope()
 end
 
 function LinState:emit_stmt_Repeat(node)
-   self:emit_noop(node.location)
+   self:emit_noop(node)
    self:enter_scope()
    self:register_label("do")
    self:enter_scope()
@@ -292,7 +300,7 @@ function LinState:emit_stmt_Repeat(node)
 end
 
 function LinState:emit_stmt_Fornum(node)
-   self:emit_noop(node.location)
+   self:emit_noop(node)
    self:emit_expr(node[2])
    self:emit_expr(node[3])
 
@@ -308,14 +316,14 @@ function LinState:emit_stmt_Fornum(node)
    self:register_var(node[1], "loopi")
    self:emit_stmts(node[5] or node[4])
    self:leave_scope()
-   self:emit_noop(node.location, true)
+   self:emit_noop(node, true)
    self:emit_goto("do")
    self:register_label("break")
    self:leave_scope()
 end
 
 function LinState:emit_stmt_Forin(node)
-   self:emit_noop(node.location)
+   self:emit_noop(node)
    self:emit_exprs(node[2])
    self:enter_scope()
    self:register_label("do")
@@ -325,14 +333,14 @@ function LinState:emit_stmt_Forin(node)
    self:register_vars(node[1], "loop")
    self:emit_stmts(node[3])
    self:leave_scope()
-   self:emit_noop(node.location, true)
+   self:emit_noop(node, true)
    self:emit_goto("do")
    self:register_label("break")
    self:leave_scope()
 end
 
 function LinState:emit_stmt_If(node)
-   self:emit_noop(node.location)
+   self:emit_noop(node)
    self:enter_scope()
 
    for i = 1, #node - 1, 2 do
@@ -356,11 +364,11 @@ function LinState:emit_stmt_If(node)
 end
 
 function LinState:emit_stmt_Label(node)
-   self:register_label(node[1], node.location)
+   self:register_label(node[1], node.location, node.end_column)
 end
 
 function LinState:emit_stmt_Goto(node)
-   self:emit_noop(node.location)
+   self:emit_noop(node)
    self:emit_goto(node[1], false, node.location)
 end
 
@@ -369,7 +377,7 @@ function LinState:emit_stmt_Break(node)
 end
 
 function LinState:emit_stmt_Return(node)
-   self:emit_noop(node.location)
+   self:emit_noop(node)
    self:emit_exprs(node)
    self:emit_goto("return")
 end
@@ -391,7 +399,7 @@ LinState.emit_stmt_Invoke = LinState.emit_expr
 
 function LinState:emit_stmt_Local(node)
    self:check_balance(node)
-   local item = new_local_item(node[1], node[2], node.location)
+   local item = new_local_item(node[1], node[2], node.location, node.first_token)
    self:emit(item)
 
    if node[2] then
@@ -402,7 +410,7 @@ function LinState:emit_stmt_Local(node)
 end
 
 function LinState:emit_stmt_Localrec(node)
-   local item = new_local_item({node[1]}, {node[2]}, node.location)
+   local item = new_local_item({node[1]}, {node[2]}, node.location, node.first_token)
    self:register_var(node[1], "var")
    self:emit(item)
    self:scan_expr(item, node[2])
@@ -410,7 +418,7 @@ end
 
 function LinState:emit_stmt_Set(node)
    self:check_balance(node)
-   local item = new_set_item(node[1], node[2], node.location)
+   local item = new_set_item(node[1], node[2], node.location, node.first_token)
    self:scan_exprs(item, node[2])
 
    for _, expr in ipairs(node[1]) do
@@ -489,8 +497,7 @@ function LinState:scan_expr_Dots(item, node)
    local dots = self:check_var(node, "access")
 
    if not dots or dots.line ~= self.lines.top then
-      lexer.syntax_error(node.location.line, node.location.column, node.location.offset,
-         "cannot use '...' outside a vararg function")
+      lexer.syntax_error(node.location, node.location.column + 2, "cannot use '...' outside a vararg function")
    end
 
    self:mark_access(item, node)

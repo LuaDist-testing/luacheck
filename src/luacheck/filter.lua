@@ -41,7 +41,7 @@ local function get_defined_and_used_globals(file_report, opts)
    local defined, globally_defined, used = {}, {}, {}
 
    for _, warning in ipairs(file_report) do
-      if warning.code and warning.code:match("11.") then
+      if warning.code:match("11.") then
          if warning.code == "111" then
             if (opts.inline and warning.definition) or core_utils.is_definition(opts, warning) then
                if (opts.inline and warning.in_module) or opts.module then
@@ -86,7 +86,7 @@ local function filter_implicit_defs_file(file_report, opts, globally_defined, gl
    local res = {}
 
    for _, warning in ipairs(file_report) do
-      if warning.code and warning.code:match("11.") then
+      if warning.code:match("11.") then
          if warning.code == "111" then
             if (opts.inline and warning.in_module) or opts.module then
                if not locally_defined[warning.name] then
@@ -125,7 +125,7 @@ local function filter_implicit_defs(report, opts)
    local info = get_implicit_defs_info(report, opts)
 
    for i, file_report in ipairs(report) do
-      if not file_report.error then
+      if not file_report.fatal then
          res[i] = filter_implicit_defs_file(file_report, opts[i], info.globally_defined, info.globally_used, info.locally_defined[i])
       else
          res[i] = file_report
@@ -135,35 +135,13 @@ local function filter_implicit_defs(report, opts)
    return res
 end
 
-local spmatch_error_mt = {}
-
-function spmatch_error_mt:__tostring()
-   return self.errmsg
-end
-
--- Behaves like string.match, except it throws a table {pattern = pattern} on invalid pattern.
--- The error message turns into original error when tostring is used on it,
--- ensure behaviour is predictable when luacheck is used as a module.
-local function string_pmatch(str, pattern)
-   assert(type(str) == "string")
-   assert(type(pattern) == "string")
-
-   local ok, res = pcall(string.match, str, pattern)
-
-   if not ok then
-      error(setmetatable({pattern = pattern, errmsg = res}, spmatch_error_mt))
-   else
-      return res
-   end
-end
-
 -- Returns two optional booleans indicating if warning matches pattern by code and name.
 local function match(warning, pattern)
    local matches_code, matches_name
    local code_pattern, name_pattern = pattern[1], pattern[2]
 
    if code_pattern then
-      matches_code = not not string_pmatch(warning.code, code_pattern)
+      matches_code = utils.pmatch(warning.code, code_pattern)
    end
 
    if name_pattern then
@@ -171,7 +149,7 @@ local function match(warning, pattern)
          -- Statement-related warnings can't match by name.
          matches_name = false
       else
-         matches_name = not not string_pmatch(warning.name, name_pattern)
+         matches_name = utils.pmatch(warning.name, name_pattern)
       end
    end
 
@@ -246,22 +224,26 @@ function filter.filters(opts, warning)
       return true
    end
 
+   if warning.self and not opts.self then
+      return true
+   end
+
    return not is_enabled(opts.rules, warning)
 end
 
 local function filter_file_report(report, opts)
    local res = {}
 
-   for _, warning in ipairs(report) do
-      if warning.code and ((opts.inline and warning.read_only) or warning.code:match("11[12]")
-            and not warning.module and opts.read_globals[warning.name]) and not (
-               (opts.inline and warning.global) or (opts.globals[warning.name] and not opts.read_globals[warning.name])) then
-         warning.code = "12" .. warning.code:sub(3, 3)
+   for _, event in ipairs(report) do
+      if ((opts.inline and event.read_only) or event.code:match("11[12]")
+            and not event.module and opts.read_globals[event.name]) and not (
+               (opts.inline and event.global) or (opts.globals[event.name] and not opts.read_globals[event.name])) then
+         event.code = "12" .. event.code:sub(3, 3)
       end
 
-      if (not warning.code and opts.inline) or (warning.code and (not warning.filtered and
-            not warning["filtered_" .. warning.code] or not opts.inline) and not filter.filters(opts, warning)) then
-         table.insert(res, warning)
+      if event.code == "011" or (event.code:match("02.") and opts.inline) or (event.code:sub(1, 1) ~= "0" and (not event.filtered and
+            not event["filtered_" .. event.code] or not opts.inline) and not filter.filters(opts, event)) then
+         table.insert(res, event)
       end
    end
 
@@ -273,7 +255,7 @@ local function filter_report(report, opts)
    local res = {}
 
    for i, file_report in ipairs(report) do
-      if not file_report.error then
+      if not file_report.fatal then
          res[i] = filter_file_report(file_report, opts[i])
       else
          res[i] = file_report

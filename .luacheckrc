@@ -1,4 +1,5 @@
 std = "min"
 cache = true
+exclude_files = {"spec/*/*"}
 
-files["spec/"].read_globals = {"describe", "it", "pending", "before_each", "after_each", "spy"}
+files["spec/"].std = "+busted"

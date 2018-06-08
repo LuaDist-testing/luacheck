@@ -3,44 +3,59 @@ local options = {}
 local utils = require "luacheck.utils"
 local stds = require "luacheck.stds"
 
-local function boolean(x)
-   return type(x) == "boolean"
-end
+local boolean = utils.has_type("boolean")
+local array_of_strings = utils.array_of("string")
 
-local function natural(x)
-   return type(x) == "number" and x >= 1
-end
+function options.split_std(std)
+   local parts = utils.split(std, "+")
 
-local function array_of_strings(x)
-   if type(x) ~= "table" then
-      return false
+   if parts[1]:match("^%s*$") then
+      parts.add = true
+      table.remove(parts, 1)
    end
 
-   for _, item in ipairs(x) do
-      if type(item) ~= "string" then
-         return false
+   for i, part in ipairs(parts) do
+      parts[i] = utils.strip(part)
+
+      if not stds[parts[i]] then
+         return
       end
    end
 
-   return true
-end
-
-local function boolean_or_string(x)
-   return type(x) == "boolean" or type(x) == "string"
+   return parts
 end
 
 local function std_or_array_of_strings(x)
-   return stds[x] or array_of_strings(x)
+   return array_of_strings(x) or (type(x) == "string" and options.split_std(x))
 end
 
-options.single_inline_options = {
+function options.add_order(option_set)
+   local opts = {}
+
+   for option in pairs(option_set) do
+      if type(option) == "string" then
+         table.insert(opts, option)
+      end
+   end
+
+   table.sort(opts)
+   utils.update(option_set, opts)
+end
+
+options.nullary_inline_options = {
+   global = boolean,
+   unused = boolean,
+   redefined = boolean,
+   unused_args = boolean,
+   unused_secondaries = boolean,
+   self = boolean,
    compat = boolean,
    allow_defined = boolean,
    allow_defined_top = boolean,
    module = boolean
 }
 
-options.multi_inline_options = {
+options.variadic_inline_options = {
    globals = array_of_strings,
    read_globals = array_of_strings,
    new_globals = array_of_strings,
@@ -50,27 +65,14 @@ options.multi_inline_options = {
    only = array_of_strings
 }
 
-options.config_options = {
-   global = boolean,
-   unused = boolean,
-   redefined = boolean,
-   unused_args = boolean,
-   unused_secondaries = boolean,
-   unused_globals = boolean,
+options.all_options = {
    std = std_or_array_of_strings,
    inline = boolean
 }
-utils.update(options.config_options, options.single_inline_options)
-utils.update(options.config_options, options.multi_inline_options)
 
-options.top_config_options = {
-   color = boolean,
-   codes = boolean,
-   formatter = string,
-   cache = boolean_or_string,
-   jobs = natural
-}
-utils.update(options.top_config_options, options.config_options)
+utils.update(options.all_options, options.nullary_inline_options)
+utils.update(options.all_options, options.variadic_inline_options)
+options.add_order(options.all_options)
 
 -- Returns true if opts is valid option_set.
 -- Otherwise returns false and, optionally, name of the problematic option.
@@ -82,9 +84,9 @@ function options.validate(option_set, opts)
    local ok, is_valid, invalid_opt = pcall(function()
       assert(type(opts) == "table")
 
-      for option, validator in pairs(option_set) do
+      for _, option in ipairs(option_set) do
          if opts[option] ~= nil then
-            if not validator(opts[option]) then
+            if not option_set[option](opts[option]) then
                return false, option
             end
          end
@@ -99,36 +101,59 @@ end
 -- Option stack is an array of options with options closer to end
 -- overriding options closer to beginning.
 
-local function get_std(opts_stack)
-   local std
+-- Returns sets of std globals and read-only std globals from option stack.
+-- Std globals can be set using compat option (sets std to stds.max) or std option.
+-- If std is a table, array part contains read-only globals, hash part - regular globals as keys.
+-- If it is a string, it must contain names of standard sets separated by +.
+-- If prefixed with +, standard sets will be added on top of existing ones.
+local function get_std_sets(opts_stack)
+   local base_std
+   local add_stds = {}
    local no_compat = false
 
    for _, opts in utils.ripairs(opts_stack) do
       if opts.compat and not no_compat then
-         std = "max"
+         base_std = "max"
          break
       elseif opts.compat == false then
          no_compat = true
       end
 
       if opts.std then
-         std = opts.std
-         break
+         if type(opts.std) == "table" then
+            base_std = opts.std
+            break
+         else
+            local parts = options.split_std(opts.std)
+
+            for _, part in ipairs(parts) do
+               table.insert(add_stds, part)
+            end
+
+            if not parts.add then
+               base_std = {}
+               break
+            end
+         end
       end
    end
 
-   return std and (stds[std] or std) or stds._G
-end
+   table.insert(add_stds, base_std or "_G")
 
--- Takes std as table, returns sets of std globals and read-only std globals.
--- Array part of std table contains read-only globals, hash part - regular globals as keys.
-local function std_to_globals(std)
    local std_globals = {}
-   local std_read_globals = utils.array_to_set(std)
+   local std_read_globals = {}
 
-   for k in pairs(std) do
-      if type(k) == "string" then
-         std_globals[k] = true
+   for _, add_std in ipairs(add_stds) do
+      add_std = stds[add_std] or add_std
+
+      for _, read_global in ipairs(add_std) do
+         std_read_globals[read_global] = true
+      end
+
+      for global in pairs(add_std) do
+         if type(global) == "string" then
+            std_globals[global] = true
+         end
       end
    end
 
@@ -200,7 +225,6 @@ end
 -- and get sensible results when intersecting macros are used.
 -- E.g. unused = false, unused_args = true should leave unused args enabled.
 local macros = {
-   {"unused_globals", "13"},
    {"unused_args", "21[23]"},
    {"global", "1"},
    {"unused", "[23]"},
@@ -268,7 +292,7 @@ function options.normalize(opts_stack)
 
    res.globals = utils.array_to_set(get_globals(opts_stack, "globals"))
    res.read_globals = utils.array_to_set(get_globals(opts_stack, "read_globals"))
-   local std_globals, std_read_globals = std_to_globals(get_std(opts_stack))
+   local std_globals, std_read_globals = get_std_sets(opts_stack)
    utils.update(res.globals, std_globals)
    utils.update(res.read_globals, std_read_globals)
 
@@ -278,11 +302,11 @@ function options.normalize(opts_stack)
 
    utils.update(res.globals, res.read_globals)
 
-   for _, option in ipairs {"unused_secondaries", "module", "allow_defined", "allow_defined_top", "inline"} do
+   for i, option in ipairs {"unused_secondaries", "self", "inline", "module", "allow_defined", "allow_defined_top"} do
       local value = get_boolean_opt(opts_stack, option)
 
       if value == nil then
-         res[option] = option == "unused_secondaries" or option == "inline"
+         res[option] = i < 4
       else
          res[option] = value
       end
