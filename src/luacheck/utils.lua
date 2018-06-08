@@ -112,4 +112,69 @@ function utils.update(t1, t2)
    end
 end
 
+local class_metatable = {}
+
+function class_metatable.__call(class, ...)
+   local obj = setmetatable({}, class)
+
+   if class.__init then
+      class.__init(obj, ...)
+   end
+
+   return obj
+end
+
+function utils.class()
+   local class = setmetatable({}, class_metatable)
+   class.__index = class
+   return class
+end
+
+utils.Stack = utils.class()
+
+function utils.Stack:__init()
+   self.size = 0
+end
+
+function utils.Stack:push(value)
+   self.size = self.size + 1
+   self[self.size] = value
+   self.top = value
+end
+
+function utils.Stack:pop()
+   local value = self[self.size]
+   self[self.size] = nil
+   self.size = self.size - 1
+   self.top = self[self.size]
+   return value
+end
+
+local function error_handler(err)
+   if type(err) == "table" then
+      return true
+   else
+      return false, err.."\n"..debug.traceback()
+   end
+end
+
+-- Calls f with arg, returns what it does.
+-- If f throws a table, returns nil.
+-- If f throws not a table, rethrows.
+function utils.pcall(f, arg)
+   local function task()
+      return f(arg)
+   end
+
+   local ok, res, err = xpcall(task, error_handler)
+
+   if ok then
+      return res
+   elseif res then
+      return nil
+   else
+      error(err, 0)
+   end
+end
+
 return utils
