@@ -1,5 +1,14 @@
 # Change Log
 
+## 0.21.1 (2017-09-10)
+
+### Fixes
+
+* Added missing definition of `ngx.ERROR` constant to `ngx_lua` std (#123).
+* Fixed unused values and initialized accesses not being reported when the
+  access is in a closure defined in code path incompatible with the value
+  assignment (#126).
+
 ## 0.21.0 (2017-09-04)
 
 ### New features and improvements
