@@ -1,5 +1,13 @@
 # Change Log
 
+## 0.21.2 (2017-11-13)
+
+### Fixes
+
+* Fixed error when an upvalue is accessed from an unreachable closure (#139).
+* Fixed unreachable code and accessing uninitialized variables not being
+  detected inside unreachable functions.
+
 ## 0.21.1 (2017-09-10)
 
 ### Fixes
