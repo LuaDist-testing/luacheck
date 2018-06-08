@@ -1,16 +1,17 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luacheck"
-version = "0.4.0-1"
+version = "0.4.1-1"
 -- LuaDist source
 source = {
-  tag = "0.4.0-1",
+  tag = "0.4.1-1",
   url = "git://github.com/LuaDist-testing/luacheck.git"
 }
 -- Original source
 -- source = {
 --    url = "git://github.com/mpeterv/luacheck.git",
---    tag = "0.4.0"
+--    branch = "0.4.x",
+--    tag = "0.4.1"
 -- }
 description = {
    summary = "A simple static analyzer",
@@ -26,7 +27,7 @@ dependencies = {
    "lua >= 5.1, < 5.3",
    "metalua-parser >= 0.7.3-2",
    "checks >= 1.0",
-   "argparse >= 0.2.0",
+   "argparse >= 0.3.0",
    "ansicolors >= 1.0-1"
 }
 build = {
