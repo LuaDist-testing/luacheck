@@ -1,6 +1,7 @@
 #!/bin/env lua
 local get_report = require "luacheck.get_report"
 local format = require "luacheck.format"
+local expand_rockspec = require "luacheck.expand_rockspec"
 local argparse = require "argparse"
 local color = require "ansicolors"
 
@@ -17,7 +18,7 @@ local function toset(array)
 end
 
 local parser = argparse "luacheck"
-   :description "luacheck 0.3.0, a simple static analyzer for Lua. "
+   :description "luacheck 0.4.0, a simple static analyzer for Lua. "
 
 parser:argument "files"
    :description "List of files to check. "
@@ -32,6 +33,8 @@ parser:flag "-u" "--no-unused"
    :description "Do not check for unused variables. "
 parser:flag "-a" "--no-unused-args"
    :description "Do not check for unused arguments and loop variables. "
+parser:flag "-v" "--no-unused-values"
+   :description "Do not check for unused values. "
 
 parser:option "--globals"
    :description "Defined globals. Hyphen expands to standard globals. "
@@ -92,16 +95,16 @@ local options = {
    check_global = not args["no-global"],
    check_redefined = not args["no-redefined"],
    check_unused = not args["no-unused"],
-   check_unused_args = not args["no-unused-args"]
+   check_unused_args = not args["no-unused-args"],
+   check_unused_values = not args["no-unused-values"]
 }
 
 local warnings, errors = 0, 0
+local files = 0
 local printed
 local limit = args.limit or 0
 
-for _, file in ipairs(args.files) do
-   local report = get_report(file, options)
-
+local function handle_report(report)
    if report.error then
       errors = errors + 1
    else
@@ -111,6 +114,24 @@ for _, file in ipairs(args.files) do
    if args.quiet == 0 or args.quiet == 1 and (report.error or report.total > 0) then
       print(format(report))
       printed = report
+   end
+
+   files = files + 1
+end
+
+for _, file in ipairs(args.files) do
+   if file:sub(-#".rockspec") == ".rockspec" then
+      local related_files = expand_rockspec(file)
+
+      if type(related_files) == "table" then
+         for _, file in ipairs(related_files) do
+            handle_report(get_report(file, options))
+         end
+      else
+         handle_report({file = file, error = related_files})
+      end
+   else
+      handle_report(get_report(file, options))
    end
 end
 
@@ -123,9 +144,14 @@ if args.quiet <= 2 then
       return color("%{bright}"..(number > limit and "%{red}" or "")..number)
    end
 
-   print(("Total: %s warning%s / %s error%s"):format(
-      format_number(warnings, limit), warnings == 1 and "" or "s",
-      format_number(errors, 0), errors == 1 and "" or "s"
+   local function plural(number)
+      return number == 1 and "" or "s"
+   end
+
+   print(("Total: %s warning%s / %s error%s in %d file%s"):format(
+      format_number(warnings, limit), plural(warnings),
+      format_number(errors, 0), plural(errors),
+      files, plural(files)
    ))
 end
 

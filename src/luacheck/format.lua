@@ -2,8 +2,8 @@ local color = require "ansicolors"
 
 local warnings = {
    global = {
-      read = "accessing undefined variable %s",
-      write = "setting non-standard global variable %s"
+      access = "accessing undefined variable %s",
+      set = "setting non-standard global variable %s"
    },
    redefined = {
       var = "variable %s was previously defined on line %s",
@@ -13,7 +13,13 @@ local warnings = {
    unused = {
       var = "unused variable %s",
       arg = "unused argument %s",
-      loop = "unused loop variable %s"
+      loop = "unused loop variable %s",
+      vararg = "unused variable length argument"
+   },
+   unused_value = {
+      var = "value assigned to variable %s is unused",
+      arg = "value of argument %s is unused",
+      loop = "value of loop variable %s is unused"
    }
 }
 
