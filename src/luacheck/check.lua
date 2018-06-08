@@ -1,30 +1,11 @@
 local scan = require "luacheck.scan"
 
 --- Checks a Metalua AST. 
--- Returns a file report. 
+-- Returns an array of warnings. 
 -- See luacheck function. 
-local function check(ast, options)
-   options = options or {}
-   local opts = {
-      check_global = true,
-      check_redefined = true,
-      check_unused = true,
-      check_unused_args = true,
-      check_unused_values = true,
-      globals = _G,
-      env_aware = true,
-      ignore = {},
-      only = false
-   }
-
-   for option in pairs(opts) do
-      if options[option] ~= nil then
-         opts[option] = options[option]
-      end
-   end
-
+local function check(ast)
    local callbacks = {}
-   local report = {total = 0, global = 0, redefined = 0, unused = 0, unused_value = 0}
+   local report = {}
 
    -- Current outer scope. 
    -- Each scope is a table mapping names to tables
@@ -32,25 +13,17 @@ local function check(ast, options)
    -- Array part contains outer scope, outer closure and outer cycle. 
    local outer = {}
 
-   -- Adds a warning, if necessary. 
-   local function add_warning(node, type_, subtype, prev_node)
-      local name = node[1]
-
-      if not opts.ignore[name] then
-         if not opts.only or opts.only[name] then
-            report.total = report.total + 1
-            report[type_] = report[type_] + 1
-            report[report.total] = {
-               type = type_,
-               subtype = subtype,
-               name = name,
-               line = node.lineinfo.first.line,
-               column = node.lineinfo.first.column,
-               prev_line = prev_node and prev_node.lineinfo.first.line,
-               prev_column = prev_node and prev_node.lineinfo.first.column
-            }
-         end
-      end
+   local function add_warning(node, type_, subtype, vartype, prev_node)
+      table.insert(report, {
+         type = type_,
+         subtype = subtype,
+         vartype = vartype,
+         name = node[1],
+         line = node.lineinfo.first.line,
+         column = node.lineinfo.first.column,
+         prev_line = prev_node and prev_node.lineinfo.first.line,
+         prev_column = prev_node and prev_node.lineinfo.first.column
+      })
    end
 
    local function resolve(name)
@@ -72,35 +45,19 @@ local function check(ast, options)
       end
    end
 
-   local function resolve_and_access(name)
-      local variable = resolve(name)
-
-      if variable then
-         access(variable)
-         variable.mentioned = true
-         return variable
-      end
-   end
-
-   local function should_check_usage(variable)
-      return variable.node[1] ~= "_" and (opts.check_unused_args or variable.type == "var")
-   end
-
    -- If the previous value was unused, adds a warning. 
    local function check_value_usage(variable)
-      if should_check_usage(variable) then
-         if not variable.is_upvalue and variable.value and not variable.value.used then
-            if variable.value.outer[3] == outer[3] then
-               local scope = variable.value.outer
+      if not variable.is_upvalue and variable.value and not variable.value.used then
+         if variable.value.outer[3] == outer[3] then
+            local scope = variable.value.outer
 
-               while scope do
-                  if scope == outer then
-                     add_warning(variable.value.node, "unused_value", variable.type)
-                     return
-                  end
-
-                  scope = scope[1]
+            while scope do
+               if scope == outer then
+                  add_warning(variable.value.node, "unused", "value", variable.type)
+                  return
                end
+
+               scope = scope[1]
             end
          end
       end
@@ -108,15 +65,13 @@ local function check(ast, options)
 
    -- If the variable was unused, adds a warning. 
    local function check_variable_usage(variable)
-      if should_check_usage(variable) then
-         if not variable.mentioned then
-            add_warning(variable.node, "unused", variable.type)
-         elseif opts.check_unused_values then
-            if not variable.used then
-               add_warning(variable.value.node, "unused_value", variable.type)
-            else
-               check_value_usage(variable)
-            end
+      if not variable.mentioned then
+         add_warning(variable.node, "unused", "var", variable.type)
+      else
+         if not variable.used then
+            add_warning(variable.value.node, "unused", "value", variable.type)
+         else
+            check_value_usage(variable)
          end
       end
    end
@@ -149,11 +104,7 @@ local function check(ast, options)
 
       if not variable then
          if name ~= "..." then
-            if not opts.env_aware or name ~= "_ENV" and not resolve_and_access("_ENV") then
-               if opts.check_global and opts.globals[name] == nil then
-                  add_warning(node, "global", action)
-               end
-            end
+            add_warning(node, "global", action, "global")
          end
       else
          if action == "access" then
@@ -188,12 +139,10 @@ local function check(ast, options)
    end
 
    function callbacks.on_end(_)
-      if opts.check_unused then
-         -- Check if some local variables in this scope were left unused. 
-         for i, variable in pairs(outer) do
-            if type(i) == "string" then
-               check_variable_usage(variable)
-            end
+      -- Check if some local variables in this scope were left unused. 
+      for i, variable in pairs(outer) do
+         if type(i) == "string" then
+            check_variable_usage(variable)
          end
       end
 
@@ -206,13 +155,8 @@ local function check(ast, options)
       local prev_variable = outer[node[1]]
 
       if prev_variable then
-         if opts.check_unused then
-            check_variable_usage(prev_variable)
-         end
-
-         if opts.check_redefined then
-            add_warning(node, "redefined", prev_variable.type, prev_variable.node)
-         end
+         check_variable_usage(prev_variable)
+         add_warning(node, "redefined", "var", prev_variable.type, prev_variable.node)
       end
 
       register_variable(node, type_)
@@ -230,9 +174,7 @@ local function check(ast, options)
       local variable = check_variable(node, "set")
 
       if variable then
-         if opts.check_unused and opts.check_unused_values then
-            check_value_usage(variable)
-         end
+         check_value_usage(variable)
 
          if not is_init then
             variable.mentioned = true

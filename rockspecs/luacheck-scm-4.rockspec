@@ -1,18 +1,8 @@
--- This file was automatically generated for the LuaDist project.
-
 package = "luacheck"
-version = "0.4.1-1"
--- LuaDist source
+version = "scm-4"
 source = {
-  tag = "0.4.1-1",
-  url = "git://github.com/LuaDist-testing/luacheck.git"
+   url = "git://github.com/mpeterv/luacheck.git"
 }
--- Original source
--- source = {
---    url = "git://github.com/mpeterv/luacheck.git",
---    branch = "0.4.x",
---    tag = "0.4.1"
--- }
 description = {
    summary = "A simple static analyzer",
    detailed = [[
@@ -28,7 +18,8 @@ dependencies = {
    "metalua-parser >= 0.7.3-2",
    "checks >= 1.0",
    "argparse >= 0.3.0",
-   "ansicolors >= 1.0-1"
+   "ansicolors >= 1.0-1",
+   "luafilesystem >= 1.6.2"
 }
 build = {
    type = "builtin",
@@ -36,8 +27,10 @@ build = {
       luacheck = "src/luacheck.lua",
       ["luacheck.scan"] = "src/luacheck/scan.lua",
       ["luacheck.check"] = "src/luacheck/check.lua",
-      ["luacheck.get_report"] = "src/luacheck/get_report.lua",
+      ["luacheck.filter"] = "src/luacheck/filter.lua",
+      ["luacheck.options"] = "src/luacheck/options.lua",
       ["luacheck.expand_rockspec"] = "src/luacheck/expand_rockspec.lua",
+      ["luacheck.utils"] = "src/luacheck/utils.lua",
       ["luacheck.format"] = "src/luacheck/format.lua"
    },
    install = {

@@ -1,20 +1,4 @@
--- Parses rockspec-like source, returns data or nil. 
-local function capture_env(src)
-   local env = {}
-   local func
-
-   if _VERSION:find "5.2" then
-      func = load(src, nil, "t", env)
-   else
-      func = loadstring(src)
-
-      if func then
-         setfenv(func, env)
-      end
-   end
-
-   return func and pcall(func) and env
-end
+local utils = require "luacheck.utils"
 
 local function extract_lua_files(rockspec)
    local res = {}
@@ -46,25 +30,21 @@ local function extract_lua_files(rockspec)
    return res
 end
 
--- Receives a name of a rockspec, returns list of related .lua files or error message. 
+-- Receives a name of a rockspec, returns list of related .lua files or nil and "syntax" or "error". 
 local function expand_rockspec(file)
-   local src
-
-   if not pcall(function()
-         local handler = io.open(file, "rb")
-         src = assert(handler:read("*a"))
-         handler:close() end) then
-      return "IO"
-   end
-
-   local rockspec = capture_env(src)
+   local rockspec, err = utils.load_config(file)
 
    if not rockspec then
-      return "syntax"
+      return nil, err
    end
 
    local ok, files = pcall(extract_lua_files, rockspec)
-   return ok and files or "syntax"
+
+   if not ok then
+      return nil, "syntax"
+   end
+
+   return files
 end
 
 return expand_rockspec
