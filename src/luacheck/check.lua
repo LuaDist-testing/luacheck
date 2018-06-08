@@ -50,16 +50,18 @@ end
 
 -- W12* (read-only global) and W131 (unused global) are patched in during filtering.
 
-function ChState:warn_unused_variable(var)
+function ChState:warn_unused_variable(value, recursive, self_recursive)
    self:warn({
-      code = "21" .. type_codes[var.type],
-      name = var.name,
-      line = var.location.line,
-      column = var.location.column,
-      secondary = is_secondary(var.values[1]) or nil,
-      func = (var.values[1].type == "func") or nil,
-      self = var.self
-   }, var.self)
+      code = "21" .. type_codes[value.var.type],
+      name = value.var.name,
+      line = value.location.line,
+      column = value.location.column,
+      secondary = is_secondary(value) or nil,
+      func = (value.type == "func") or nil,
+      mutually_recursive = not self_recursive and recursive or nil,
+      recursive = self_recursive,
+      self = value.var.self
+   }, value.var.self)
 end
 
 function ChState:warn_unset(var)
@@ -98,8 +100,19 @@ function ChState:warn_unused_value(value)
       name = value.var.name,
       line = value.location.line,
       column = value.location.column,
-      secondary = is_secondary(value) or nil
+      secondary = is_secondary(value) or nil,
    }, value.type == "arg" and value.var.self)
+end
+
+function ChState:warn_unused_field_value(node)
+   self:warn({
+      code = "314",
+      name = node.field,
+      index = node.is_index,
+      line = node.location.line,
+      column = node.location.column,
+      end_column = node.location.column + #node.first_token - 1
+   })
 end
 
 function ChState:warn_uninit(node)

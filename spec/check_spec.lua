@@ -81,6 +81,70 @@ end
       ]])
    end)
 
+   it("reports unused function with forward declaration as variable, not value", function()
+      assert.same({
+         {code = "211", name = "noop", func = true, line = 1, column = 22, end_column = 25}
+      }, check[[
+local noop; function noop() end
+      ]])
+   end)
+
+   it("detects unused recursive functions", function()
+      assert.same({
+         {code = "211", name = "f", func = true, recursive = true, line = 1, column = 16, end_column = 16}
+      }, check[[
+local function f(x)
+   return x <= 1 and 1 or x * f(x - 1)
+end
+      ]])
+   end)
+
+   it("detects unused mutually recursive functions", function()
+      assert.same({
+         {code = "211", name = "odd", func = true, mutually_recursive = true, line = 3, column = 16, end_column = 18},
+         {code = "211", name = "even", func = true, mutually_recursive = true, line = 7, column = 10, end_column = 13}
+      }, check[[
+local even
+
+local function odd(x)
+   return x == 1 or even(x - 1)
+end
+
+function even(x)
+   return x == 0 or odd(x - 1)
+end
+      ]])
+   end)
+
+   it("does not incorrectly detect unused recursive functions inside unused functions", function()
+      assert.same({
+         {code = "211", name = "unused", func = true, line = 1, column = 16, end_column = 21}
+      }, check[[
+local function unused()
+   local function nested1() end
+   local function nested2() nested2() end
+   return nested1(), nested2()
+end
+      ]])
+   end)
+
+   it("does not incorrectly detect unused recursive functions used by an unused recursive function", function()
+      assert.same({
+         {code = "211", name = "g", func = true, recursive = true, line = 2, column = 16, end_column = 16}
+      }, check[[
+local function f() return 1 end
+local function g() return f() + g() end
+      ]])
+
+      assert.same({
+         {code = "211", name = "g", func = true, recursive = true, line = 2, column = 16, end_column = 16}
+      }, check[[
+local f
+local function g() return f() + g() end
+function f() return 1 end
+      ]])
+   end)
+
    it("detects unused locals from function arguments", function()
       assert.same({
          {code = "212", name = "foo", line = 1, column = 17, end_column = 19}
@@ -201,6 +265,27 @@ return function(f, t)
    local a
    a, t[1] = f()
 end
+      ]])
+   end)
+
+   it("detects duplicated fields in table literals", function()
+      assert.same({
+         {code = "314", name = "key", line = 3, column = 4, end_column = 4},
+         {code = "314", name = "2", index = true, line = 6, column = 4, end_column = 4},
+         {code = "314", name = "key", line = 7, column = 4, end_column = 6},
+         {code = "314", name = "0.2e1", line = 9, column = 4, end_column = 4}
+      }, check[[
+local x, y, z = 1, 2, 3
+return {
+   ["key"] = 4,
+   [z] = 7,
+   1,
+   y,
+   key = x,
+   key = 0,
+   [0.2e1] = 6,
+   [2] = 7
+}
       ]])
    end)
 

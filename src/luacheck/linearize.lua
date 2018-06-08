@@ -4,11 +4,14 @@ local utils = require "luacheck.utils"
 local pseudo_labels = utils.array_to_set({"do", "else", "break", "end", "return"})
 
 -- Who needs classes anyway.
-local function new_line()
+local function new_line(node, parent, value)
    return {
       accessed_upvalues = {}, -- Maps variables to arrays of accessing items.
       set_upvalues = {}, -- Maps variables to arays of setting items.
       lines = {},
+      node = node,
+      parent = parent,
+      value = value,
       items = utils.Stack()
    }
 end
@@ -35,13 +38,22 @@ local function new_var(line, node, type_)
 end
 
 local function new_value(var_node, value_node, is_init)
-   return {
+   local value = {
       var = var_node.var,
       location = var_node.location,
-      type = value_node and value_node.tag == "Function" and "func" or (is_init and var_node.var.type or "var"),
+      type = is_init and var_node.var.type or "var",
       initial = is_init,
+      node = value_node,
+      using_lines = {},
       empty = is_init and not value_node and (var_node.var.type == "var")
    }
+
+   if value_node and value_node.tag == "Function" then
+      value.type = "func"
+      value_node.value = value
+   end
+
+   return value
 end
 
 local function new_label(line, name, location, end_column)
@@ -521,8 +533,63 @@ LinState.scan_expr_Index = LinState.scan_exprs
 LinState.scan_expr_Call = LinState.scan_exprs
 LinState.scan_expr_Invoke = LinState.scan_exprs
 LinState.scan_expr_Paren = LinState.scan_exprs
-LinState.scan_expr_Pair = LinState.scan_exprs
-LinState.scan_expr_Table = LinState.scan_exprs
+
+local function node_to_lua_value(node)
+   if node.tag == "True" then
+      return true, "true"
+   elseif node.tag == "False" then
+      return false, "false"
+   elseif node.tag == "String" then
+      return node[1], node[1]
+   elseif node.tag == "Number" then
+      local str = node[1]
+
+      if str:find("[iIuUlL]") then
+         -- Ignore LuaJIT cdata literals.
+         return
+      end
+
+      -- Always convert to float to get consistent results on Lua 5.2/5.3.
+      if not str:find("[%.eEpP]") then
+         str = str .. ".0"
+      end
+
+      local number = tonumber(str)
+
+      if number == number and number < 1/0 and number > -1/0 then
+         return number, node[1]
+      end
+   end
+end
+
+function LinState:scan_expr_Table(item, node)
+   local array_index = 1.0
+   local key_to_node = {}
+
+   for _, pair in ipairs(node) do
+      local key, field
+
+      if pair.tag == "Pair" then
+         key, field = node_to_lua_value(pair[1])
+         self:scan_exprs(item, pair)
+      else
+         key = array_index
+         field = tostring(math.floor(key))
+         array_index = array_index + 1.0
+         self:scan_expr(item, pair)
+      end
+
+      if field then
+         if key_to_node[key] then
+            self.chstate:warn_unused_field_value(key_to_node[key])
+         end
+
+         key_to_node[key] = pair
+         pair.field = field
+         pair.is_index = pair.tag ~= "Pair" or nil
+      end
+   end
+end
 
 function LinState:scan_expr_Op(item, node)
    self:scan_expr(item, node[2])
@@ -582,13 +649,13 @@ function LinState:register_set_variables()
    end
 end
 
-function LinState:build_line(args, block)
-   self.lines:push(new_line())
+function LinState:build_line(node)
+   self.lines:push(new_line(node, self.lines.top))
    self:enter_scope()
-   self:emit(new_local_item(args))
+   self:emit(new_local_item(node[1]))
    self:enter_scope()
-   self:register_vars(args, "arg")
-   self:emit_stmts(block)
+   self:register_vars(node[1], "arg")
+   self:emit_stmts(node[2])
    self:leave_scope()
    self:register_label("return")
    self:leave_scope()
@@ -603,7 +670,7 @@ function LinState:build_line(args, block)
 end
 
 function LinState:scan_expr_Function(item, node)
-   local line = self:build_line(node[1], node[2])
+   local line = self:build_line(node)
    table.insert(item.lines, line)
 
    for _, nested_line in ipairs(line.lines) do
@@ -612,10 +679,10 @@ function LinState:scan_expr_Function(item, node)
 end
 
 -- Builds linear representation of AST and returns it.
--- Emits warnings: global, redefined/shadowed, unused label, unbalanced assignment, empty block.
+-- Emits warnings: global, redefined/shadowed, unused field, unused label, unbalanced assignment, empty block.
 local function linearize(chstate, ast)
    local linstate = LinState(chstate)
-   local line = linstate:build_line({{tag = "Dots", "..."}}, ast)
+   local line = linstate:build_line({{{tag = "Dots", "..."}}, ast})
    assert(linstate.lines.size == 0)
    assert(linstate.scopes.size == 0)
    return line

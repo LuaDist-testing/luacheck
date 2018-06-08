@@ -454,6 +454,8 @@ describe("parser", function()
          assert.same({line = 1, column = 4, end_column = 4, msg = "expected ')' near <eof>"}, get_error("a(b"))
          assert.same({line = 2, column = 2, end_column = 2, msg = "expected ')' (to close '(' on line 1) near <eof>"},
             get_error("a(\nb"))
+         assert.same({line = 2, column = 1, end_column = 2, msg = "expected ')' (to close '(' on line 1) near 'cc'"},
+            get_error("(a\ncc"))
          assert.same({line = 1, column = 1, end_column = 1, msg = "expected statement near '1'"}, get_error("1()"))
          assert.same({line = 1, column = 1, end_column = 5, msg = "expected statement near ''foo''"}, get_error("'foo'()"))
          assert.same({line = 1, column = 9, end_column = 9, msg = "expected identifier near '('"}, get_error("function() end ()"))
@@ -962,6 +964,37 @@ baz::
 a();
 (b)();
 ((c).d)[3] = 2
+]])))
+   end)
+
+   it("provides correct location info for conditions", function()
+      assert.same({
+                     {tag = "If", location = {line = 1, column = 1, offset = 1}, first_token = "if",
+                        {tag = "Id", "x", location = {line = 1, column = 5, offset = 5}, first_token = "x"},
+                        {location = {line = 1, column = 8, offset = 8}}
+                     }
+                  }, (parser([[
+if (x) then end
+]])))
+   end)
+
+   it("provides correct location info for table keys", function()
+      assert.same({
+                     {tag = "Return", location = {line = 1, column = 1, offset = 1}, first_token = "return",
+                        {tag = "Table", location = {line = 1, column = 8, offset = 8},
+                           {tag = "Pair", location = {line = 1, column = 9, offset = 9}, first_token = "a",
+                              {tag = "String", "a", location = {line = 1, column = 9, offset = 9}},
+                              {tag = "Id", "b", location = {line = 1, column = 13, offset = 13}}
+                           },
+                           {tag = "Pair", location = {line = 1, column = 16, offset = 16}, first_token = "[",
+                              {tag = "Id", "x", location = {line = 1, column = 17, offset = 17}},
+                              {tag = "Id", "y", location = {line = 1, column = 22, offset = 22}},
+                           },
+                           {tag = "Id", "z", location = {line = 1, column = 26, offset = 26}, first_token = "z"}
+                        }
+                     }
+                  }, (parser([[
+return {a = b, [x] = y, (z)}
 ]])))
    end)
 

@@ -10,19 +10,37 @@ local message_formats = {
    ["022"] = "unpaired push directive",
    ["023"] = "unpaired pop directive",
    ["111"] = function(w)
-      if w.module then return "setting non-module global variable %s"
-         else return "setting non-standard global variable %s" end end,
+      if w.module then
+         return "setting non-module global variable %s"
+      else
+         return "setting non-standard global variable %s"
+      end
+   end,
    ["112"] = "mutating non-standard global variable %s",
    ["113"] = "accessing undefined variable %s",
    ["121"] = "setting read-only global variable %s",
    ["122"] = "mutating read-only global variable %s",
    ["131"] = "unused global variable %s",
    ["211"] = function(w)
-      if w.func then return "unused function %s"
-         else return "unused variable %s" end end,
+      if w.func then
+         if w.recursive then
+            return "unused recursive function %s"
+         elseif w.mutually_recursive then
+            return "unused mutually recursive function %s"
+         else
+            return "unused function %s"
+         end
+      else
+         return "unused variable %s"
+      end
+   end,
    ["212"] = function(w)
-      if w.name == "..." then return "unused variable length argument"
-         else return "unused argument %s" end end,
+      if w.name == "..." then
+         return "unused variable length argument"
+      else
+         return "unused argument %s"
+      end
+   end,
    ["213"] = "unused loop variable %s",
    ["221"] = "variable %s is never set",
    ["231"] = "variable %s is never accessed",
@@ -31,6 +49,9 @@ local message_formats = {
    ["311"] = "value assigned to variable %s is unused",
    ["312"] = "value of argument %s is unused",
    ["313"] = "value of loop variable %s is unused",
+   ["314"] = function(w)
+      return "value assigned to " .. (w.index and "index" or "field") .. " %s is unused"
+   end,
    ["321"] = "accessing uninitialized variable %s",
    ["411"] = "variable %s was previously defined on line %s",
    ["412"] = "variable %s was previously defined as an argument on line %s",
@@ -188,6 +209,9 @@ local function format_file_report(report, file_name, opts)
       end
 
       table.insert(buf, "")
+   elseif report.fatal then
+      table.insert(buf, "")
+      table.insert(buf, "    " .. file_name .. ": " .. report.msg)
    end
 
    return table.concat(buf, "\n")
@@ -288,7 +312,7 @@ function formatters.plain(report, file_names, opts)
 
    for i, file_report in ipairs(report) do
       if file_report.fatal then
-         table.insert(buf, ("%s: %s"):format(file_names[i], fatal_type(file_report)))
+         table.insert(buf, ("%s: %s (%s)"):format(file_names[i], fatal_type(file_report), file_report.msg))
       else
          for _, event in ipairs(file_report) do
             table.insert(buf, format_event(file_names[i], event, opts))
