@@ -1,5 +1,26 @@
 # Change Log
 
+## 0.18.0 (2017-01-10)
+
+### New features and improvements
+
+* Indirect mutations of read-only globals through local aliases
+  are now detected (e.g. `local t = table; t.foo = "bar"`).
+* New CLI, config, and inline option `not_globals` for removing
+  defined standard and custom globals (#88).
+* Custom globals defined as mutable using `globals` option
+  can now be set to read-only using `read_globals` option
+  in overwriting settings (previously `globals` had priority
+  over `read_globals` even if `read_globals` was the last
+  option used).
+* Luacheck exit codes are now documented.
+
+### Fixes
+
+* Warnings that are explictly enabled by inline options are
+  now correctly reported. E.g. `--luacheck: std none` now
+  results in warnings for any used globals (#51).
+
 ## 0.17.1 (2016-12-22)
 
 ### Fixes

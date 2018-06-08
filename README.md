@@ -38,7 +38,7 @@ If it is not possible to install [LuaFileSystem](http://keplerproject.github.io/
 
 For manual installation, only a Lua interpreter binary is required.
 
-1. Download and unpack latest Luacheck release ([.zip](https://github.com/mpeterv/luacheck/archive/0.17.1.zip) [.tar.gz](https://github.com/mpeterv/luacheck/archive/0.17.1.tar.gz)).
+1. Download and unpack latest Luacheck release ([.zip](https://github.com/mpeterv/luacheck/archive/0.18.0.zip), [.tar.gz](https://github.com/mpeterv/luacheck/archive/0.18.0.tar.gz)).
 2. Run `install.lua <path>` script using the Lua interpreter. If Lua interpreter is not in `PATH`, invoke it using absolute path.
 3. Add `<path>/bin` to PATH or run Luacheck as `<path>/bin/luacheck`.
 
@@ -89,7 +89,7 @@ There are a few plugins which allow using Luacheck directly inside an editor, sh
 * For Vim, [Syntastic](https://github.com/scrooloose/syntastic/) contains [luacheck checker](https://github.com/scrooloose/syntastic/wiki/Lua%3A---luacheck);
 * For Sublime Text 3 there is [SublimeLinter-luacheck](https://packagecontrol.io/packages/SublimeLinter-luacheck) which requires [SublimeLinter](http://sublimelinter.readthedocs.org/en/latest/);
 * For Atom there is [linter-luacheck](https://atom.io/packages/linter-luacheck) which requires [AtomLinter](https://github.com/atom-community/linter);
-* For Emacs, [Flycheck](http://www.flycheck.org/) contains [luacheck checker](http://www.flycheck.org/manual/latest/Supported-languages.html#Lua);
+* For Emacs, [Flycheck](http://www.flycheck.org/) contains [luacheck checker](http://www.flycheck.org/en/latest/languages.html#lua);
 * For Brackets, there is [linter.luacheck](https://github.com/Malcolm3141/brackets-luacheck) extension.
 
 If you are a plugin developer, see [recommended way of using Luacheck in a plugin](http://luacheck.readthedocs.org/en/stable/cli.html#stable-interface-for-editor-plugins-and-tools).
@@ -107,7 +107,7 @@ Documentation can be built using [Sphinx](http://sphinx-doc.org/): `sphinx-build
 
 ## Development
 
-Luacheck is currently in development. The latest released version is 0.17.1. The interface of the `luacheck` module may change between minor releases. The command line interface is fairly stable.
+Luacheck is currently in development. The latest released version is 0.18.0. The interface of the `luacheck` module may change between minor releases. The command line interface is fairly stable.
 
 Use the Luacheck issue tracker on GitHub to submit bugs, suggestions and questions. Any pull requests are welcome, too.
 
@@ -120,7 +120,7 @@ After the Luacheck repo is cloned and changes are made, run `luarocks make` (opt
 ```
 The MIT License (MIT)
 
-Copyright (c) 2014 - 2016 Peter Melnichenko
+Copyright (c) 2014 - 2017 Peter Melnichenko
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

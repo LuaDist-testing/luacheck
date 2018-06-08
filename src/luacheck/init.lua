@@ -5,7 +5,7 @@ local format = require "luacheck.format"
 local utils = require "luacheck.utils"
 
 local luacheck = {
-   _VERSION = "0.17.1"
+   _VERSION = "0.18.0"
 }
 
 local function raw_validate_options(fname, opts)
@@ -40,7 +40,7 @@ local function validate_options(fname, items, opts)
    end
 end
 
--- Returns report for a string. Report is an array of warnings and errors.
+-- Returns report for a string.
 function luacheck.get_report(src)
    assert(type(src) == "string", ("bad argument #1 to 'luacheck.get_report' (string expected, got %s)"):format(type(src)))
    return check(src)

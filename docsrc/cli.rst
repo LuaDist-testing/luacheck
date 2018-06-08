@@ -38,7 +38,12 @@ The output of ``luacheck`` consists of separate reports for each checked file an
 
    Total: 14 warnings / 1 error in 4 files
 
-``luacheck`` exits with 0 if no warnings or errors occurred and with a positive number otherwise.
+``luacheck`` chooses exit code as follows:
+
+* Exit code is ``0`` if no warnings or errors occurred.
+* Exit code is ``1`` if some warnings or syntax errors occured.
+* Exit code is ``2`` if some files couldn't be checked, typically due to an incorrect file name.
+* Exit code is ``3`` if there was a critical error (invalid CLI arguments, config, or cache file).
 
 .. _cliopts:
 
@@ -83,6 +88,7 @@ Option                                  Meaning
 ``--read-globals [<global>] ...``       Add read-only globals.
 ``--new-globals [<global>] ...``        Set custom globals. Removes custom globals added previously.
 ``--new-read-globals [<global>] ...``   Set read-only globals. Removes read-only globals added previously.
+``--not-globals [<global>] ...``        Remove custom and standard globals.
 ``-c | --compat``                       Equivalent to ``--std max``.
 ``-d | --allow-defined``                Allow defining globals implicitly by setting them.
 

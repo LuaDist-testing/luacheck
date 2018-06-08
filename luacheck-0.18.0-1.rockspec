@@ -1,16 +1,16 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luacheck"
-version = "0.17.1-1"
+version = "0.18.0-1"
 -- LuaDist source
 source = {
-  tag = "0.17.1-1",
+  tag = "0.18.0-1",
   url = "git://github.com/LuaDist-testing/luacheck.git"
 }
 -- Original source
 -- source = {
 --    url = "git+https://github.com/mpeterv/luacheck.git",
---    tag = "0.17.1"
+--    tag = "0.18.0"
 -- }
 description = {
    summary = "A static analyzer and a linter for Lua",
@@ -34,6 +34,7 @@ build = {
       ["luacheck.check"] = "src/luacheck/check.lua",
       ["luacheck.config"] = "src/luacheck/config.lua",
       ["luacheck.core_utils"] = "src/luacheck/core_utils.lua",
+      ["luacheck.detect_globals"] = "src/luacheck/detect_globals.lua",
       ["luacheck.expand_rockspec"] = "src/luacheck/expand_rockspec.lua",
       ["luacheck.filter"] = "src/luacheck/filter.lua",
       ["luacheck.format"] = "src/luacheck/format.lua",
