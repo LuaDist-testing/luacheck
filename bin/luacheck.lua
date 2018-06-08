@@ -1,5 +1,5 @@
 #!/bin/env lua
-local version = "0.7.0"
+local version = "0.7.1"
 
 local function fatal(msg)
    io.stderr:write("Fatal error: "..msg.."\n")
@@ -240,15 +240,16 @@ local function main()
       end
 
       validate(config)
-      local res = options.combine(config, opts)
+      local res = {}
 
       for i, file in ipairs(files) do
          local file_config = type(config.files) == "table" and rawget(config.files, file)
 
          if file_config then
             validate(file_config)
-            res[i] = file_config
          end
+
+         res[i] = options.combine(config, file_config, opts)
       end
 
       return res
