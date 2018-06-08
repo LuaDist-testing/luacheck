@@ -1,16 +1,16 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = "luacheck"
-version = "0.8.0-1"
+version = "0.9.0-1"
 -- LuaDist source
 source = {
-  tag = "0.8.0-1",
+  tag = "0.9.0-1",
   url = "git://github.com/LuaDist-testing/luacheck.git"
 }
 -- Original source
 -- source = {
 --    url = "git://github.com/mpeterv/luacheck.git",
---    tag = "0.8.0"
+--    tag = "0.9.0"
 -- }
 description = {
    summary = "A static analyzer and a linter for Lua",
@@ -18,7 +18,7 @@ description = {
 Luacheck is a command-line tool for linting and static analysis of Lua code. It is able to spot usage of undefined global variables, unused local variables and a few other typical problems within Lua programs.
 ]],
    homepage = "https://github.com/mpeterv/luacheck",
-   license = "MIT/X11"
+   license = "MIT <http://opensource.org/licenses/MIT>"
 }
 dependencies = {
    "lua >= 5.1, < 5.4",
@@ -37,6 +37,7 @@ build = {
       ["luacheck.lexer"] = "src/luacheck/lexer.lua",
       ["luacheck.filter"] = "src/luacheck/filter.lua",
       ["luacheck.options"] = "src/luacheck/options.lua",
+      ["luacheck.inline_options"] = "src/luacheck/inline_options.lua",
       ["luacheck.stds"] = "src/luacheck/stds.lua",
       ["luacheck.expand_rockspec"] = "src/luacheck/expand_rockspec.lua",
       ["luacheck.format"] = "src/luacheck/format.lua",

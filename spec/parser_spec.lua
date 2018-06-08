@@ -2,6 +2,7 @@ local parser = require "luacheck.parser"
 
 local function strip_locations(ast)
    ast.location = nil
+   ast.end_location = nil
 
    for i=1, #ast do
       if type(ast[i]) == "table" then
@@ -25,13 +26,25 @@ local function get_expr(src)
    return get_node("return " .. src)[1]
 end
 
+local function get_comments(src)
+   return (select(2, parser(src)))
+end
+
+local function get_code_lines(src)
+   return select(3, parser(src))
+end
+
+local function assert_syntax_error(src)
+   assert.has_error(function() parser(src) end)
+end
+
 describe("parser", function()
    it("parses empty source correctly", function()
       assert.same({}, get_ast(" "))
    end)
 
    it("does not allow extra ending keywords", function()
-      assert.is_nil(parser("end"))
+      assert_syntax_error("end")
    end)
 
    it("parses return statement correctly", function()
@@ -43,31 +56,31 @@ describe("parser", function()
                      {tag = "Number", "1"},
                      {tag = "String", "foo"}
                   }, get_node("return 1, 'foo'"))
-      assert.is_nil(parser("return 1,"))
+      assert_syntax_error("return 1,")
    end)
 
    it("parses labels correctly", function()
       assert.same({tag = "Label", "fail"}, get_node("::fail::"))
       assert.same({tag = "Label", "fail"}, get_node("::\nfail\n::"))
-      assert.is_nil(parser("::::"))
-      assert.is_nil(parser("::1::"))
+      assert_syntax_error("::::")
+      assert_syntax_error("::1::")
    end)
 
    it("parses goto correctly", function()
       assert.same({tag = "Goto", "fail"}, get_node("goto fail"))
-      assert.is_nil(parser("goto"))
-      assert.is_nil(parser("goto foo, bar"))
+      assert_syntax_error("goto")
+      assert_syntax_error("goto foo, bar")
    end)
 
    it("parses break correctly", function()
       assert.same({tag = "Break"}, get_node("break"))
-      assert.is_nil(parser("break fail"))
+      assert_syntax_error("break fail")
    end)
 
    it("parses do end correctly", function()
       assert.same({tag = "Do"}, get_node("do end"))
-      assert.is_nil(parser("do"))
-      assert.is_nil(parser("do until false"))
+      assert_syntax_error("do")
+      assert_syntax_error("do until false")
    end)
 
    it("parses while do end correctly", function()
@@ -75,11 +88,11 @@ describe("parser", function()
                      {tag = "True"},
                      {}
                   }, get_node("while true do end"))
-      assert.is_nil(parser("while"))
-      assert.is_nil(parser("while true"))
-      assert.is_nil(parser("while true do"))
-      assert.is_nil(parser("while do end"))
-      assert.is_nil(parser("while true, false do end"))
+      assert_syntax_error("while")
+      assert_syntax_error("while true")
+      assert_syntax_error("while true do")
+      assert_syntax_error("while do end")
+      assert_syntax_error("while true, false do end")
    end)
 
    it("parses repeat until correctly", function()
@@ -87,9 +100,9 @@ describe("parser", function()
                      {},
                      {tag = "True"}
                   }, get_node("repeat until true"))
-      assert.is_nil(parser("repeat"))
-      assert.is_nil(parser("repeat until"))
-      assert.is_nil(parser("repeat until true, false"))
+      assert_syntax_error("repeat")
+      assert_syntax_error("repeat until")
+      assert_syntax_error("repeat until true, false")
    end)
 
    describe("when parsing if", function()
@@ -98,11 +111,11 @@ describe("parser", function()
                         {tag = "True"},
                         {}
                      }, get_node("if true then end"))
-         assert.is_nil(parser("if"))
-         assert.is_nil(parser("if true"))
-         assert.is_nil(parser("if true then"))
-         assert.is_nil(parser("if then end"))
-         assert.is_nil(parser("if true, false then end"))
+         assert_syntax_error("if")
+         assert_syntax_error("if true")
+         assert_syntax_error("if true then")
+         assert_syntax_error("if then end")
+         assert_syntax_error("if true, false then end")
       end)
 
       it("parses if then else end correctly", function()
@@ -111,8 +124,8 @@ describe("parser", function()
                         {},
                         {}
                      }, get_node("if true then else end"))
-         assert.is_nil(parser("if true then else"))
-         assert.is_nil(parser("if true then else else end"))
+         assert_syntax_error("if true then else")
+         assert_syntax_error("if true then else else end")
       end)
 
       it("parses if then elseif then end correctly", function()
@@ -122,8 +135,8 @@ describe("parser", function()
                         {tag = "False"},
                         {}
                      }, get_node("if true then elseif false then end"))
-         assert.is_nil(parser("if true then elseif end"))
-         assert.is_nil(parser("if true then elseif then end"))
+         assert_syntax_error("if true then elseif end")
+         assert_syntax_error("if true then elseif then end")
       end)
 
       it("parses if then elseif then else end correctly", function()
@@ -134,7 +147,7 @@ describe("parser", function()
                         {},
                         {}
                      }, get_node("if true then elseif false then else end"))
-         assert.is_nil(parser("if true then elseif false then else"))
+         assert_syntax_error("if true then elseif false then else")
       end)
    end)
 
@@ -146,13 +159,13 @@ describe("parser", function()
                         {tag = "Op", "len", {tag = "Id", "t"}},
                         {}
                      }, get_node("for i=1, #t do end"))
-         assert.is_nil(parser("for"))
-         assert.is_nil(parser("for i"))
-         assert.is_nil(parser("for i ~= 2"))
-         assert.is_nil(parser("for i = 2 do end"))
-         assert.is_nil(parser("for i=1, #t do"))
-         assert.is_nil(parser("for (i)=1, #t do end"))
-         assert.is_nil(parser("for 3=1, #t do end"))
+         assert_syntax_error("for")
+         assert_syntax_error("for i")
+         assert_syntax_error("for i ~= 2")
+         assert_syntax_error("for i = 2 do end")
+         assert_syntax_error("for i=1, #t do")
+         assert_syntax_error("for (i)=1, #t do end")
+         assert_syntax_error("for 3=1, #t do end")
       end)
 
       it("parses fornum with step correctly", function()
@@ -163,7 +176,7 @@ describe("parser", function()
                         {tag = "Number", "2"},
                         {}
                      }, get_node("for i=1, #t, 2 do end"))
-         assert.is_nil(parser("for i=1, #t, 2, 3 do"))
+         assert_syntax_error("for i=1, #t, 2, 3 do")
       end)
 
       it("parses forin correctly", function()
@@ -183,8 +196,8 @@ describe("parser", function()
                         },
                         {}
                      }, get_node("for i, j in t, 'foo' do end"))
-         assert.is_nil(parser("for in foo do end"))
-         assert.is_nil(parser("for i in do end"))
+         assert_syntax_error("for in foo do end")
+         assert_syntax_error("for i in do end")
       end)
    end)
 
@@ -196,14 +209,14 @@ describe("parser", function()
                            {tag = "Function", {}, {}}
                         }
                      }, get_node("function a() end"))
-         assert.is_nil(parser("function"))
-         assert.is_nil(parser("function a"))
-         assert.is_nil(parser("function a("))
-         assert.is_nil(parser("function a()"))
-         assert.is_nil(parser("function (a)()"))
-         assert.is_nil(parser("function() end"))
-         assert.is_nil(parser("(function a() end)"))
-         assert.is_nil(parser("function a() end()"))
+         assert_syntax_error("function")
+         assert_syntax_error("function a")
+         assert_syntax_error("function a(")
+         assert_syntax_error("function a()")
+         assert_syntax_error("function (a)()")
+         assert_syntax_error("function() end")
+         assert_syntax_error("(function a() end)")
+         assert_syntax_error("function a() end()")
       end)
 
       it("parses simple function with arguments correctly", function()
@@ -225,10 +238,10 @@ describe("parser", function()
                            {tag = "Function", {{tag = "Id", "b"}, {tag = "Dots", "..."}}, {}}
                         }
                      }, get_node("function a(b, ...) end"))
-         assert.is_nil(parser("function a(b, ) end"))
-         assert.is_nil(parser("function a(b.c) end"))
-         assert.is_nil(parser("function a((b)) end"))
-         assert.is_nil(parser("function a(..., ...) end"))
+         assert_syntax_error("function a(b, ) end")
+         assert_syntax_error("function a(b.c) end")
+         assert_syntax_error("function a((b)) end")
+         assert_syntax_error("function a(..., ...) end")
       end)
 
       it("parses field function correctly", function()
@@ -247,8 +260,8 @@ describe("parser", function()
                            {tag = "Function", {}, {}}
                         }
                      }, get_node("function a.b.c() end"))
-         assert.is_nil(parser("function a[b]() end"))
-         assert.is_nil(parser("function a.() end"))
+         assert_syntax_error("function a[b]() end")
+         assert_syntax_error("function a.() end")
       end)
 
       it("parses method function correctly", function()
@@ -267,7 +280,7 @@ describe("parser", function()
                            {tag = "Function", {{tag = "Id", "self"}}, {}}
                         }
                      }, get_node("function a.b:c() end"))
-         assert.is_nil(parser("function a:b.c() end"))
+         assert_syntax_error("function a:b.c() end")
       end)
    end)
 
@@ -282,11 +295,11 @@ describe("parser", function()
                            {tag = "Id", "b"}
                         }
                      }, get_node("local a, b"))
-         assert.is_nil(parser("local"))
-         assert.is_nil(parser("local a,"))
-         assert.is_nil(parser("local a.b"))
-         assert.is_nil(parser("local a[b]"))
-         assert.is_nil(parser("local (a)"))
+         assert_syntax_error("local")
+         assert_syntax_error("local a,")
+         assert_syntax_error("local a.b")
+         assert_syntax_error("local a[b]")
+         assert_syntax_error("local (a)")
       end)
 
       it("parses local declaration with assignment correctly", function()
@@ -304,11 +317,11 @@ describe("parser", function()
                            {tag = "Id", "d"}
                         }
                      }, get_node("local a, b = c, d"))
-         assert.is_nil(parser("local a = "))
-         assert.is_nil(parser("local a = b,"))
-         assert.is_nil(parser("local a.b = c"))
-         assert.is_nil(parser("local a[b] = c"))
-         assert.is_nil(parser("local a, (b) = c"))
+         assert_syntax_error("local a = ")
+         assert_syntax_error("local a = b,")
+         assert_syntax_error("local a.b = c")
+         assert_syntax_error("local a[b] = c")
+         assert_syntax_error("local a, (b) = c")
       end)
 
       it("parses local function declaration correctly", function()
@@ -316,8 +329,8 @@ describe("parser", function()
                         {tag = "Id", "a"}, 
                         {tag = "Function", {}, {}}
                      }, get_node("local function a() end"))
-         assert.is_nil(parser("local function"))
-         assert.is_nil(parser("local function a.b() end"))
+         assert_syntax_error("local function")
+         assert_syntax_error("local function a.b() end")
       end)
    end)
 
@@ -356,11 +369,11 @@ describe("parser", function()
                            {tag = "Id", "d"}
                         }
                      }, get_node("(f():g())[9] = d"))
-         assert.is_nil(parser("a"))
-         assert.is_nil(parser("a = "))
-         assert.is_nil(parser("a() = b"))
-         assert.is_nil(parser("(a) = b"))
-         assert.is_nil(parser("1 = b"))
+         assert_syntax_error("a")
+         assert_syntax_error("a = ")
+         assert_syntax_error("a() = b")
+         assert_syntax_error("(a) = b")
+         assert_syntax_error("1 = b")
       end)
 
       it("parses multi assignment correctly", function()
@@ -372,12 +385,12 @@ describe("parser", function()
                            {tag = "Id", "d"}
                         }
                      }, get_node("a, b = c, d"))
-         assert.is_nil(parser("a, b"))
-         assert.is_nil(parser("a, = b"))
-         assert.is_nil(parser("a, b = "))
-         assert.is_nil(parser("a, b = c,"))
-         assert.is_nil(parser("a, b() = c"))
-         assert.is_nil(parser("a, (b) = c"))
+         assert_syntax_error("a, b")
+         assert_syntax_error("a, = b")
+         assert_syntax_error("a, b = ")
+         assert_syntax_error("a, b = c,")
+         assert_syntax_error("a, b() = c")
+         assert_syntax_error("a, (b) = c")
       end)
    end)
 
@@ -413,11 +426,11 @@ describe("parser", function()
                            {tag = "Id", "b"}
                         }
                      }, get_node("(a)(b)()"))
-         assert.is_nil(parser("()()"))
-         assert.is_nil(parser("a("))
-         assert.is_nil(parser("1()"))
-         assert.is_nil(parser("'foo'()"))
-         assert.is_nil(parser("function() end ()"))
+         assert_syntax_error("()()")
+         assert_syntax_error("a(")
+         assert_syntax_error("1()")
+         assert_syntax_error("'foo'()")
+         assert_syntax_error("function() end ()")
       end)
 
       it("parses method calls correctly", function()
@@ -457,11 +470,11 @@ describe("parser", function()
                            {tag = "String", "b"}
                         }, {tag = "String", "c"}
                      }, get_node("a:b():c()"))
-         assert.is_nil(parser("1:b()"))
-         assert.is_nil(parser("'':a()"))
-         assert.is_nil(parser("function()end:b()"))
-         assert.is_nil(parser("a:b:c()"))
-         assert.is_nil(parser("a:"))
+         assert_syntax_error("1:b()")
+         assert_syntax_error("'':a()")
+         assert_syntax_error("function()end:b()")
+         assert_syntax_error("a:b:c()")
+         assert_syntax_error("a:")
       end)
    end)
 
@@ -508,10 +521,10 @@ describe("parser", function()
                         {tag = "Id", "b"},
                         {tag = "Id", "c"}
                      }, get_expr("{a; b, c;}"))
-         assert.is_nil(parser("return {;}"))
-         assert.is_nil(parser("return {"))
-         assert.is_nil(parser("return {a,,}"))
-         assert.is_nil(parser("return {a = "))
+         assert_syntax_error("return {;}")
+         assert_syntax_error("return {")
+         assert_syntax_error("return {a,,}")
+         assert_syntax_error("return {a = ")
       end)
 
       it("wraps last element in table constructors in parens when needed", function()
@@ -676,13 +689,13 @@ describe("parser", function()
       end)
 
       it("does not allow statements after return", function()
-         assert.is_nil(parser("return break"))
-         assert.is_nil(parser("return; break"))
-         assert.is_nil(parser("return;;"))
-         assert.is_nil(parser("return 1 break"))
-         assert.is_nil(parser("return 1; break"))
-         assert.is_nil(parser("return 1, 2 break"))
-         assert.is_nil(parser("return 1, 2; break"))
+         assert_syntax_error("return break")
+         assert_syntax_error("return; break")
+         assert_syntax_error("return;;")
+         assert_syntax_error("return 1 break")
+         assert_syntax_error("return 1; break")
+         assert_syntax_error("return 1, 2 break")
+         assert_syntax_error("return 1, 2; break")
       end)
 
       it("parses nested statements correctly", function()
@@ -802,6 +815,7 @@ end
                      {tag = "Localrec", location = {line = 1, column = 1, offset = 1},
                         {tag = "Id", "foo", location = {line = 1, column = 16, offset = 16}},
                         {tag = "Function", location = {line = 1, column = 7, offset = 7},
+                           end_location = {line = 4, column = 1, offset = 78},
                            {
                               {tag = "Id", "a", location = {line = 1, column = 20, offset = 20}},
                               {tag = "Id", "b", location = {line = 1, column = 23, offset = 23}},
@@ -841,6 +855,7 @@ end
                         },
                         {
                            {tag = "Function", location = {line = 6, column = 1, offset = 83},
+                              end_location = {line = 10, column = 1, offset = 142},
                               {
                                  {tag = "Id", "self", location = {line = 6, column = 15, offset = 97}},
                                  {tag = "Id", "arg", location = {line = 6, column = 16, offset = 98}}
@@ -859,7 +874,7 @@ end
                            }
                         }
                      }
-                  }, parser([[
+                  }, (parser([[
 local function foo(a, b, c, ...)
    local d = (a + b) * c
    return d, (...)
@@ -870,7 +885,38 @@ function t:bar(arg)
       print(arg)
    end
 end
-]]))
+]])))
 
+   end)
+
+   describe("providing misc information", function()
+      it("provides comments correctly", function()
+         assert.same({
+            {contents = " ignore something", location = {line = 1, column = 1, offset = 1}},
+            {contents = " comments", location = {line = 2, column = 13, offset = 33}},
+            {contents = "long comment", location = {line = 3, column = 13, offset = 57}}
+         }, get_comments([[
+-- ignore something
+foo = bar() -- comments
+return true --[=[
+long comment]=]
+         ]]))
+      end)
+
+      it("provides lines with code correctly", function()
+         -- EOS is considered "code" (which does not matter w.r.t inline options).
+         assert.same({nil, true, true, true, true, true, nil, nil, true, true, true}, get_code_lines([[
+-- nothing here
+local foo = 2
++
+3
++
+{
+   --[=[empty]=]
+
+}
+::bar::
+]]))
+      end)
    end)
 end)

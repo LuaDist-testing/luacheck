@@ -42,6 +42,12 @@ local message_formats = {
 }
 
 local function get_message_format(warning)
+   if warning.invalid then
+      return "invalid inline option"
+   elseif warning.unpaired then
+      return "unpaired inline option"
+   end
+
    local message_format = message_formats[warning.code]
 
    if type(message_format) == "function" then
@@ -92,12 +98,16 @@ local function capitalize(str)
    return str:gsub("^.", string.upper)
 end
 
+local function error_type(file_report)
+   return capitalize(file_report.error) .. " error"
+end
+
 local function format_file_report_header(report, file_name, color)
    local label = "Checking " .. file_name
    local status
 
    if report.error then
-      status = format_color(capitalize(report.error) .. " error", color, "bright")
+      status = format_color(error_type(report), color, "bright")
    elseif #report == 0 then
       status = format_color("OK", color, "bright", "green")
    else
@@ -107,22 +117,26 @@ local function format_file_report_header(report, file_name, color)
    return label .. (" "):rep(math.max(50 - #label, 1)) .. status
 end
 
-local function format_file_report(report, file_name, color, codes)
+local function format_warning(file_name, warning, codes, color)
+   local message_format = get_message_format(warning)
+   local message = message_format:format(warning.name and format_name(warning.name, color), warning.prev_line)
+
+   if warning.code and codes then
+      message = ("(W%s) %s"):format(warning.code, message)
+   end
+
+   local location = ("%s:%d:%d"):format(file_name, warning.line, warning.column)
+   return location .. ": " .. message
+end
+
+local function format_file_report(report, file_name, codes, color)
    local buf = {format_file_report_header(report, file_name, color)}
 
    if not report.error and #report > 0 then
       table.insert(buf, "")
 
       for _, warning in ipairs(report) do
-         local location = ("%s:%d:%d"):format(file_name, warning.line, warning.column)
-         local message_format = get_message_format(warning)
-         local message = message_format:format(warning.name and format_name(warning.name, color), warning.prev_line)
-
-         if codes then
-            message = ("(W%s) %s"):format(warning.code, message)
-         end
-
-         table.insert(buf, ("    %s: %s"):format(location, message))
+         table.insert(buf, "    " .. format_warning(file_name, warning, codes, color))
       end
 
       table.insert(buf, "")
@@ -131,25 +145,16 @@ local function format_file_report(report, file_name, color, codes)
    return table.concat(buf, "\n")
 end
 
---- Formats a report. 
--- Recognized options: 
---    `options.quiet`: integer in range 0-3. See CLI. Default: 0. 
---    `options.limit`: See CLI. Default: 0. 
---    `options.color`: should use ansicolors? Default: true. 
---    `options.codes`: should output warning codes? Default: false.
-local function format(report, file_names, options)
-   local quiet = options.quiet or 0
-   local limit = options.limit or 0
-   local color = (options.color ~= false) and color_support
-   local codes = options.codes
+local formatters = {}
 
+function formatters.default(report, file_names, codes, quiet, limit, color)
    local buf = {}
 
    if quiet <= 2 then
       for i, file_report in ipairs(report) do
          if quiet == 0 or file_report.error or #file_report > 0 then
             table.insert(buf, (quiet == 2 and format_file_report_header or format_file_report) (
-               file_report, type(file_names[i]) == "string" and file_names[i] or "stdin", color, codes))
+               file_report, file_names[i], codes, color))
          end
       end
 
@@ -165,6 +170,92 @@ local function format(report, file_names, options)
    ))
 
    return table.concat(buf, "\n")
+end
+
+function formatters.TAP(report, file_names, codes)
+   local buf = {}
+
+   for i, file_report in ipairs(report) do
+      if file_report.error then
+         table.insert(buf, ("not ok %d %s: %s error"):format(#buf + 1, file_names[i], file_report.error))
+      elseif #file_report == 0 then
+         table.insert(buf, ("ok %d %s"):format(#buf + 1, file_names[i]))
+      else
+         for _, warning in ipairs(file_report) do
+            table.insert(buf, ("not ok %d %s"):format(#buf + 1, format_warning(file_names[i], warning, codes)))
+         end
+      end
+   end
+
+   table.insert(buf, 1, "1.." .. tostring(#buf))
+   return table.concat(buf, "\n")
+end
+
+function formatters.JUnit(report, file_names)
+   local buf = {[[<?xml version="1.0" encoding="UTF-8"?>]]}
+
+   table.insert(buf, ([[<testsuite name="Luacheck report" tests="%d">]]):format(#report))
+
+   for i, file_report in ipairs(report) do
+      if file_report.error or #file_report ~= 0 then
+         table.insert(buf, ([[    <testcase name="%s" classname="%s">]]):format(file_names[i], file_names[i]))
+
+         if file_report.error then
+            table.insert(buf, ([[        <error type="%s"/>]]):format(error_type(file_report)))
+         else
+            for _, warning in ipairs(file_report) do
+               local warning_type
+
+               if warning.code then
+                  warning_type = "W" .. warning.code
+               else
+                  warning_type = "Inline option"
+               end
+
+               table.insert(buf, ([[        <failure type="%s" message="%s"/>]]):format(
+                  warning_type, format_warning(file_names[i], warning)))
+            end
+         end
+
+         table.insert(buf, [[    </testcase>]])
+      else
+         table.insert(buf, ([[    <testcase name="%s" classname="%s"/>]]):format(file_names[i], file_names[i]))
+      end
+   end
+
+   table.insert(buf, [[</testsuite>]])
+   return table.concat(buf, "\n")
+end
+
+function formatters.plain(report, file_names, codes)
+   local buf = {}
+
+   for i, file_report in ipairs(report) do
+      if file_report.error then
+         table.insert(buf, ("%s: %s error"):format(file_names[i], file_report.error))
+      else
+         for _, warning in ipairs(file_report) do
+            table.insert(buf, format_warning(file_names[i], warning, codes))
+         end
+      end
+   end
+
+   return table.concat(buf, "\n")
+end
+
+--- Formats a report.
+-- Recognized options:
+--    `options.formatter`: name of used formatter. Default: "default".
+--    `options.quiet`: integer in range 0-3. See CLI. Default: 0.
+--    `options.limit`: See CLI. Default: 0.
+--    `options.color`: should use ansicolors? Default: true.
+--    `options.codes`: should output warning codes? Default: false.
+local function format(report, file_names, options)
+   local quiet = options.quiet or 0
+   local limit = options.limit or 0
+   local color = (options.color ~= false) and color_support
+   local codes = options.codes
+   return formatters[options.formatter or "default"](report, file_names, codes, quiet, limit, color)
 end
 
 return format

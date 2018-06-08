@@ -1,5 +1,5 @@
 #!/usr/bin/env lua
-local version = "0.8.0"
+local version = "0.9.0"
 
 local function fatal(msg)
    io.stderr:write("Fatal error: "..msg.."\n")
@@ -22,7 +22,6 @@ local function main()
    local options = require "luacheck.options"
    local expand_rockspec = require "luacheck.expand_rockspec"
    local utils = require "luacheck.utils"
-   local format = require "luacheck.format"
 
    local default_config = ".luacheckrc"
 
@@ -123,6 +122,9 @@ Otherwise, the pattern matches warning code.]]
          :count "*"
          :argname "<patt>"
 
+      parser:flag "--no-inline"
+         :description "Disable inline options. "
+
       parser:option "-l" "--limit"
          :description "Exit with 0 if there are <limit> or less warnings. (default: 0)"
          :convert(tonumber)
@@ -134,6 +136,13 @@ Otherwise, the pattern matches warning code.]]
          :description "Do not look up configuration file. "
 
       parser:mutex(config_opt, no_config_opt)
+
+      parser:option "--formatter"
+         :description [[Use custom formatter. <formatter> must be a module name or one of:
+   TAP - Test Anything Protocol formatter;
+   JUnit - JUnit XML formatter;
+   plain - simple warning-per-line formatter;
+   default - standard formatter. ]]
 
       parser:flag "-q" "--quiet"
          :count "0-3"
@@ -236,9 +245,10 @@ Otherwise, the pattern matches warning code.]]
             unused_values = "no_unused_values",
             unused_secondaries = "no_unused_secondaries",
             unset = "no_unset",
-            unused_globals = "no_unused_globals"} do
+            unused_globals = "no_unused_globals",
+            inline = "no_inline"} do
          if args[argname] then
-            res[optname] = not args[argname]
+            res[optname] = false
          end
       end
 
@@ -278,7 +288,7 @@ Otherwise, the pattern matches warning code.]]
       for i, file in ipairs(files) do
          res[i] = {config}
 
-         if type(config.files) == "table" then
+         if type(config.files) == "table" and type(file) == "string" then
             local overriding_paths = {}
 
             for path in pairs(config.files) do
@@ -313,6 +323,36 @@ Otherwise, the pattern matches warning code.]]
       end
    end
 
+   local function normalize_file_names(file_names)
+      for i, file_name in ipairs(file_names) do
+         if type(file_name) ~= "string" then
+            file_names[i] = "stdin"
+         end
+      end
+   end
+
+   local builtin_formatters = utils.array_to_set({"TAP", "JUnit", "plain", "default"})
+
+   local function pformat(report, file_names, args)
+      if builtin_formatters[args.formatter] then
+         return (require "luacheck.format")(report, file_names, args)
+      end
+
+      local require_ok, formatter_module = pcall(require, args.formatter)
+
+      if not require_ok or type(formatter_module) ~= "function" then
+         fatal(("Couldn't load custom formatter '%s': %s"):format(args.formatter, formatter_module))
+      end
+
+      local output_ok, output = pcall(formatter_module, report, file_names, args)
+
+      if not output_ok then
+         fatal(("Couldn't run custom formatter '%s': %s"):format(args.formatter, output))
+      end
+
+      return output
+   end
+
    local args = get_args()
    local opts = get_options(args)
    local config
@@ -325,6 +365,7 @@ Otherwise, the pattern matches warning code.]]
    local files = remove_bad_rockspecs(file_names, bad_rockspecs)
    local report = luacheck(files, combine_config_and_options(config, args.config, opts, files))
    insert_bad_rockspecs(report, file_names, bad_rockspecs)
+   normalize_file_names(file_names)
 
    -- Apply cli options from config.
    if args.no_color then
@@ -335,8 +376,15 @@ Otherwise, the pattern matches warning code.]]
 
    args.limit = args.limit or (config and config.limit or 0)
    args.codes = args.codes or config and config.codes
+   args.formatter = args.formatter or (config and config.formatter) or "default"
 
-   print(format(report, file_names, args))
+   local output = pformat(report, file_names, args)
+
+   if #output > 0 and output:sub(-1) ~= "\n" then
+      output = output .. "\n"
+   end
+
+   io.stdout:write(output)
 
    local exit_code
 

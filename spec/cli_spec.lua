@@ -478,8 +478,168 @@ Total: 5 warnings / 0 errors in 1 file
 ]], get_output "spec/samples/read_globals.lua --std=lua52 --globals foo --read-globals bar --codes")
    end)
 
+   it("applies inline options", function()
+      assert.equal([[
+Checking spec/samples/inline_options.lua          Failure
+
+    spec/samples/inline_options.lua:12:4: accessing undefined variable qu
+    spec/samples/inline_options.lua:15:1: accessing undefined variable baz
+    spec/samples/inline_options.lua:24:10: unused variable g
+    spec/samples/inline_options.lua:26:7: unused variable f
+    spec/samples/inline_options.lua:26:10: unused variable g
+    spec/samples/inline_options.lua:28:1: unpaired inline option
+    spec/samples/inline_options.lua:30:4: unpaired inline option
+    spec/samples/inline_options.lua:36:1: empty do..end block
+    spec/samples/inline_options.lua:37:10: empty if branch
+
+Total: 9 warnings / 0 errors in 1 file
+]], get_output "spec/samples/inline_options.lua --std=none")
+
+      assert.equal([[
+Checking spec/samples/inline_options.lua          Failure
+
+    spec/samples/inline_options.lua:12:4: accessing undefined variable qu
+    spec/samples/inline_options.lua:15:1: accessing undefined variable baz
+    spec/samples/inline_options.lua:24:10: unused variable g
+    spec/samples/inline_options.lua:26:7: unused variable f
+    spec/samples/inline_options.lua:26:10: unused variable g
+    spec/samples/inline_options.lua:28:1: unpaired inline option
+    spec/samples/inline_options.lua:30:4: unpaired inline option
+    spec/samples/inline_options.lua:36:1: empty do..end block
+
+Total: 8 warnings / 0 errors in 1 file
+]], get_output "spec/samples/inline_options.lua --std=none --ignore=542")
+
+      assert.equal([[
+Checking spec/samples/global_inline_options.lua   Failure
+
+    spec/samples/global_inline_options.lua:6:10: unused global variable f
+    spec/samples/global_inline_options.lua:7:4: setting non-standard global variable baz
+    spec/samples/global_inline_options.lua:18:4: setting non-module global variable external
+
+Total: 3 warnings / 0 errors in 1 file
+]], get_output "spec/samples/global_inline_options.lua --std=lua52")
+
+      assert.equal([[
+Checking spec/samples/read_globals_inline_options.lua Failure
+
+    spec/samples/read_globals_inline_options.lua:2:10: accessing undefined variable baz
+    spec/samples/read_globals_inline_options.lua:3:1: setting read-only global variable foo
+    spec/samples/read_globals_inline_options.lua:3:11: setting non-standard global variable baz
+    spec/samples/read_globals_inline_options.lua:3:16: mutating non-standard global variable baz
+    spec/samples/read_globals_inline_options.lua:5:1: setting read-only global variable foo
+
+Total: 5 warnings / 0 errors in 1 file
+]], get_output "spec/samples/read_globals_inline_options.lua --std=lua52")
+
+      assert.equal([[
+Checking spec/samples/read_globals_inline_options.lua Failure
+
+    spec/samples/read_globals_inline_options.lua:3:16: mutating read-only global variable baz
+
+Total: 1 warning / 0 errors in 1 file
+]], get_output "spec/samples/read_globals_inline_options.lua --std=lua52 --read-globals baz --globals foo")
+   end)
+
+   it("inline options can be disabled", function()
+      assert.equal([[
+Checking spec/samples/inline_options.lua          Failure
+
+    spec/samples/inline_options.lua:3:1: accessing undefined variable foo
+    spec/samples/inline_options.lua:4:1: accessing undefined variable bar
+    spec/samples/inline_options.lua:6:16: unused function f
+    spec/samples/inline_options.lua:8:4: accessing undefined variable foo
+    spec/samples/inline_options.lua:9:4: accessing undefined variable bar
+    spec/samples/inline_options.lua:10:4: accessing undefined variable baz
+    spec/samples/inline_options.lua:11:4: accessing undefined variable qu
+    spec/samples/inline_options.lua:12:4: accessing undefined variable qu
+    spec/samples/inline_options.lua:15:1: accessing undefined variable baz
+    spec/samples/inline_options.lua:19:7: unused variable f
+    spec/samples/inline_options.lua:19:7: variable f was previously defined on line 6
+    spec/samples/inline_options.lua:22:7: unused variable g
+    spec/samples/inline_options.lua:24:7: unused variable f
+    spec/samples/inline_options.lua:24:7: variable f was previously defined on line 19
+    spec/samples/inline_options.lua:24:10: unused variable g
+    spec/samples/inline_options.lua:24:10: variable g was previously defined on line 22
+    spec/samples/inline_options.lua:26:7: unused variable f
+    spec/samples/inline_options.lua:26:7: variable f was previously defined on line 24
+    spec/samples/inline_options.lua:26:10: unused variable g
+    spec/samples/inline_options.lua:26:10: variable g was previously defined on line 24
+    spec/samples/inline_options.lua:29:16: unused function f
+    spec/samples/inline_options.lua:29:16: variable f was previously defined on line 26
+    spec/samples/inline_options.lua:34:1: empty do..end block
+    spec/samples/inline_options.lua:36:1: empty do..end block
+    spec/samples/inline_options.lua:37:10: empty if branch
+
+Total: 25 warnings / 0 errors in 1 file
+]], get_output "spec/samples/inline_options.lua --std=none --no-inline")
+   end)
+
+   it("allows using custom formatter", function()
+      assert.equal([[Files: 2
+Formatter: spec.formatters.custom_formatter
+Quiet: 1
+Limit: 0
+Color: false
+Codes: true
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --formatter spec.formatters.custom_formatter -q --codes --no-color")
+   end)
+
+   it("has built-in TAP formatter", function()
+      assert.equal([[1..6
+ok 1 spec/samples/good_code.lua
+not ok 2 spec/samples/bad_code.lua:3:16: unused function 'helper'
+not ok 3 spec/samples/bad_code.lua:3:23: unused variable length argument
+not ok 4 spec/samples/bad_code.lua:7:10: setting non-standard global variable 'embrace'
+not ok 5 spec/samples/bad_code.lua:8:10: variable 'opt' was previously defined as an argument on line 7
+not ok 6 spec/samples/bad_code.lua:9:11: accessing undefined variable 'hepler'
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --std=lua52 --formatter TAP")
+
+      assert.equal([[1..6
+ok 1 spec/samples/good_code.lua
+not ok 2 spec/samples/bad_code.lua:3:16: (W211) unused function 'helper'
+not ok 3 spec/samples/bad_code.lua:3:23: (W212) unused variable length argument
+not ok 4 spec/samples/bad_code.lua:7:10: (W111) setting non-standard global variable 'embrace'
+not ok 5 spec/samples/bad_code.lua:8:10: (W412) variable 'opt' was previously defined as an argument on line 7
+not ok 6 spec/samples/bad_code.lua:9:11: (W113) accessing undefined variable 'hepler'
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --std=lua52 --formatter TAP --codes")
+   end)
+
+   it("has built-in JUnit formatter", function()
+      assert.equal([[<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="Luacheck report" tests="2">
+    <testcase name="spec/samples/good_code.lua" classname="spec/samples/good_code.lua"/>
+    <testcase name="spec/samples/bad_code.lua" classname="spec/samples/bad_code.lua">
+        <failure type="W211" message="spec/samples/bad_code.lua:3:16: unused function 'helper'"/>
+        <failure type="W212" message="spec/samples/bad_code.lua:3:23: unused variable length argument"/>
+        <failure type="W111" message="spec/samples/bad_code.lua:7:10: setting non-standard global variable 'embrace'"/>
+        <failure type="W412" message="spec/samples/bad_code.lua:8:10: variable 'opt' was previously defined as an argument on line 7"/>
+        <failure type="W113" message="spec/samples/bad_code.lua:9:11: accessing undefined variable 'hepler'"/>
+    </testcase>
+</testsuite>
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --std=lua52 --formatter JUnit")
+   end)
+
+   it("has built-in simple warning-per-line formatter", function()
+      assert.equal("", get_output "spec/samples/good_code.lua --std=lua52 --formatter plain")
+
+      assert.equal([[spec/samples/bad_code.lua:3:16: unused function 'helper'
+spec/samples/bad_code.lua:3:23: unused variable length argument
+spec/samples/bad_code.lua:7:10: setting non-standard global variable 'embrace'
+spec/samples/bad_code.lua:8:10: variable 'opt' was previously defined as an argument on line 7
+spec/samples/bad_code.lua:9:11: accessing undefined variable 'hepler'
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --std=lua52 --formatter plain")
+
+      assert.equal([[spec/samples/bad_code.lua:3:16: (W211) unused function 'helper'
+spec/samples/bad_code.lua:3:23: (W212) unused variable length argument
+spec/samples/bad_code.lua:7:10: (W111) setting non-standard global variable 'embrace'
+spec/samples/bad_code.lua:8:10: (W412) variable 'opt' was previously defined as an argument on line 7
+spec/samples/bad_code.lua:9:11: (W113) accessing undefined variable 'hepler'
+]], get_output "spec/samples/good_code.lua spec/samples/bad_code.lua --std=lua52 --formatter plain --codes")
+   end)
+
    it("expands folders", function()
       local output = get_output "spec/samples -qqq"
-      assert.truthy(output:match("Total: [%d]+ warnings / 1 error in 15 files\n"))
+      assert.truthy(output:match("Total: [%d]+ warnings / 1 error in 18 files\n"))
    end)
 end)
