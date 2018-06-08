@@ -1,26 +1,37 @@
 local cache = require "luacheck.cache"
 local utils = require "luacheck.utils"
 
+local actual_format_version
+
+setup(function()
+   actual_format_version = cache.format_version
+   cache.format_version = 0
+end)
+
+teardown(function()
+   cache.format_version = actual_format_version
+end)
+
 describe("cache", function()
    describe("serialize", function()
       it("returns serialized result", function()
          assert.same(
-            'return {{"111","foo",5,100,[23]=true},{"211","bar",4,1,[7]=true,[10]=true},{[3]=5,[4]=100000,[13]=true}}',
+            [[return {{"111","foo",5,100,102,[22]=true},{"211","bar",4,1,3,[8]=true,[11]=true},{"011",[4]=100000,[23]="near '\"'"}}]],
             cache.serialize({
-               {code = "111", name = "foo", line = 5, column = 100, in_module = true},
-               {code = "211", name = "bar", line = 4, column = 1, secondary = true, filtered = true},
-               {line = 5, column = 100000, unpaired = true}
+               {code = "111", name = "foo", line = 5, column = 100, end_column = 102, in_module = true},
+               {code = "211", name = "bar", line = 4, column = 1, end_column = 3, secondary = true, filtered = true},
+               {code = "011", column = 100000, msg = "near '\"'"}
             })
          )
       end)
 
       it("puts repeating string values into locals", function()
          assert.same(
-            'local A,B="111","foo";return {{A,B,5,100,[23]=true},{A,B,6,100,[7]=true,[10]=true},{[3]=5,[4]=100000,[13]=true}}',
+            [[local A,B="111","foo";return {{A,B,5,100,[22]=true},{A,B,6,100,[8]=true,[11]=true},{"011",[4]=100000,[23]="near '\"'"}}]],
             cache.serialize({
                {code = "111", name = "foo", line = 5, column = 100, in_module = true},
                {code = "111", name = "foo", line = 6, column = 100, secondary = true, filtered = true},
-               {line = 5, column = 100000, unpaired = true}
+               {code = "011", column = 100000, msg = "near '\"'"}
             })
          )
       end)
@@ -68,7 +79,7 @@ describe("cache", function()
       end)
 
       it("handles error result", function()
-         assert.same('return {{"011",[3]=2,[4]=4,[24]="message"}}', cache.serialize({{code = "011", line = 2, column = 4, msg = "message"}}))
+         assert.same('return {{"011",[3]=2,[4]=4,[23]="message"}}', cache.serialize({{code = "011", line = 2, column = 4, msg = "message"}}))
       end)
    end)
 
@@ -87,6 +98,8 @@ describe("cache", function()
          cache.update(tmpname, {"foo", "bar", "foo"}, {1, 2, 1}, {{{code="111"}}, {}, {{code="112"}}})
          local data = utils.read_file(tmpname)
          assert.equals([[
+
+0
 foo
 1
 return {{"112"}}
@@ -103,6 +116,8 @@ return {}
          assert.is_true(appended)
          local data = utils.read_file(tmpname)
          assert.equals([[
+
+0
 foo
 1
 return {{"112"}}
@@ -122,6 +137,8 @@ return {{"111"},{"122"}}
          assert.is_false(appended)
          local data = utils.read_file(tmpname)
          assert.equals([[
+
+0
 foo
 4
 return {}
@@ -137,6 +154,14 @@ return {{"111"},{"122"}}
 
    describe("load", function()
       describe("error handling", function()
+         it("returns {} on cache with bad version", function()
+            assert.same({}, cache.load("spec/caches/different_format.cache", {"foo"}, {123}))
+         end)
+
+         it("returns {} on cache without version", function()
+            assert.same({}, cache.load("spec/caches/old_format.cache", {"foo"}, {123}))
+         end)
+
          it("returns nil on cache with bad number of lines", function()
             assert.is_nil(cache.load("spec/caches/bad_lines.cache", {"foo"}, {123}))
          end)
