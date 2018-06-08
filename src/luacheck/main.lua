@@ -491,7 +491,12 @@ patterns.]])
    end
 
    local parser = get_parser()
-   local args = parser:parse()
+   local ok, args = parser:pparse()
+   if not ok then
+      io.stderr:write(("%s\n\nError: %s\n"):format(parser:get_usage(), args))
+      os.exit(3)
+   end
+
    local conf
 
    if args.no_config then
@@ -523,7 +528,16 @@ patterns.]])
 
    io.stdout:write(output)
 
-   local exit_code = math.min(report.fatals + report.errors + report.warnings, 255)
+   local exit_code
+
+   if report.fatals > 0 then
+      exit_code = 2
+   elseif report.warnings > 0 or report.errors > 0 then
+      exit_code = 1
+   else
+      exit_code = 0
+   end
+
    os.exit(exit_code)
 end
 
