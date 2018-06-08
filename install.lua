@@ -75,8 +75,8 @@ if is_windows then
 else
    fh:write(([=[
 #!/bin/sh
-exec "%s" -e "package.path=[[$(dirname "$0")/../src/?.lua;$(dirname "$0")/../src/?/init.lua;]]..package.path" "$(dirname "$0")/luacheck.lua" "$@"
-]=]):format(args.lua))
+exec "%s" -e "package.path=[[%s/../src/?.lua;%s/../src/?/init.lua;]]..package.path" "%s/luacheck.lua" "$@"
+]=]):format(args.lua, '$(dirname "$0")', '$(dirname "$0")', '$(dirname "$0")'))
 end
 
 fh:close()
@@ -108,7 +108,7 @@ for _, filename in ipairs {
       "filter.lua",
       "options.lua",
       "inline_options.lua",
-      "stds.lua",
+      "builtin_standards.lua",
       "expand_rockspec.lua",
       "multithreading.lua",
       "cache.lua",
@@ -119,7 +119,8 @@ for _, filename in ipairs {
       "utils.lua",
       "argparse.lua",
       "whitespace.lua",
-      "detect_globals.lua"} do
+      "detect_globals.lua",
+      "standards.lua"} do
    copy("src" .. dirsep .. "luacheck" .. dirsep .. filename, luacheck_lib_dir)
 end
 

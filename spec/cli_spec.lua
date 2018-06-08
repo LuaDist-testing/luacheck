@@ -47,6 +47,8 @@ local function get_exitcode(command)
    end
 end
 
+-- luacheck: max line length 180
+
 describe("cli", function()
    it("exists", function()
       assert.equal(0, get_exitcode "--help")
@@ -122,18 +124,20 @@ Total: 5 warnings / 0 errors in 1 file
 
    it("detects whitespace issues", function()
       assert.equal([[
-Checking spec/samples/bad_whitespace.lua          8 warnings
+Checking spec/samples/bad_whitespace.lua          10 warnings
 
     spec/samples/bad_whitespace.lua:4:26: line contains trailing whitespace
-    spec/samples/bad_whitespace.lua:8:25: line contains trailing whitespace
-    spec/samples/bad_whitespace.lua:13:40: line contains trailing whitespace
-    spec/samples/bad_whitespace.lua:17:1: line contains only whitespace
-    spec/samples/bad_whitespace.lua:18:1: line contains only whitespace
-    spec/samples/bad_whitespace.lua:19:1: line contains only whitespace
-    spec/samples/bad_whitespace.lua:20:1: line contains only whitespace
-    spec/samples/bad_whitespace.lua:25:1: inconsistent indentation (SPACE followed by TAB)
+    spec/samples/bad_whitespace.lua:8:25: trailing whitespace in a comment
+    spec/samples/bad_whitespace.lua:14:20: trailing whitespace in a string
+    spec/samples/bad_whitespace.lua:17:30: trailing whitespace in a comment
+    spec/samples/bad_whitespace.lua:22:40: trailing whitespace in a comment
+    spec/samples/bad_whitespace.lua:26:1: line contains only whitespace
+    spec/samples/bad_whitespace.lua:27:1: line contains only whitespace
+    spec/samples/bad_whitespace.lua:28:1: line contains only whitespace
+    spec/samples/bad_whitespace.lua:29:1: line contains only whitespace
+    spec/samples/bad_whitespace.lua:34:1: inconsistent indentation (SPACE followed by TAB)
 
-Total: 8 warnings / 0 errors in 1 file
+Total: 10 warnings / 0 errors in 1 file
 ]], get_output "spec/samples/bad_whitespace.lua --no-config")
       assert.equal(1, get_exitcode "spec/samples/bad_whitespace.lua --no-config")
    end)
@@ -544,12 +548,43 @@ Total: 6 warnings / 0 errors in 1 file
 ]], get_output "spec/samples/redefined.lua --globals each --no-config")
    end)
 
+   it("detects lines that are too long", function()
+      assert.equal([[
+Checking spec/samples/line_length.lua             4 warnings
+
+    spec/samples/line_length.lua:2:1: line is too long (123 > 120)
+    spec/samples/line_length.lua:3:1: line is too long (164 > 120)
+    spec/samples/line_length.lua:8:1: line is too long (132 > 120)
+    spec/samples/line_length.lua:10:1: line is too long (85 > 80)
+
+Total: 4 warnings / 0 errors in 1 file
+]], get_output "spec/samples/line_length.lua --no-config")
+
+      assert.equal([[
+Checking spec/samples/line_length.lua             3 warnings
+
+    spec/samples/line_length.lua:3:1: line is too long (164 > 130)
+    spec/samples/line_length.lua:8:1: line is too long (132 > 130)
+    spec/samples/line_length.lua:10:1: line is too long (85 > 80)
+
+Total: 3 warnings / 0 errors in 1 file
+]], get_output "spec/samples/line_length.lua --no-config --max-line-length=130")
+
+      assert.equal([[
+Checking spec/samples/line_length.lua             1 warning
+
+    spec/samples/line_length.lua:10:1: line is too long (85 > 80)
+
+Total: 1 warning / 0 errors in 1 file
+]], get_output "spec/samples/line_length.lua --no-config --no-max-line-length")
+   end)
+
    it("detects issues related to read-only globals", function()
       assert.equal([[
 Checking spec/samples/read_globals.lua            5 warnings
 
     spec/samples/read_globals.lua:1:1: setting read-only global variable 'string'
-    spec/samples/read_globals.lua:2:1: mutating read-only global variable 'table'
+    spec/samples/read_globals.lua:2:1: setting undefined field 'append' of global 'table'
     spec/samples/read_globals.lua:5:1: setting read-only global variable 'bar'
     spec/samples/read_globals.lua:6:1: mutating non-standard global variable 'baz'
     spec/samples/read_globals.lua:6:21: accessing undefined variable 'baz'
@@ -563,11 +598,59 @@ Total: 5 warnings / 0 errors in 1 file
 Checking spec/samples/indirect_globals.lua        3 warnings
 
     spec/samples/indirect_globals.lua:2:11-16: accessing undefined variable 'global'
-    spec/samples/indirect_globals.lua:5:1-8: indirectly mutating read-only global variable 'table'
+    spec/samples/indirect_globals.lua:5:1-8: indirectly setting undefined field 'concat.foo.bar' of global 'table'
     spec/samples/indirect_globals.lua:5:32-37: accessing undefined variable 'global'
 
 Total: 3 warnings / 0 errors in 1 file
 ]], get_output "spec/samples/indirect_globals.lua --std=min --ranges --no-config")
+   end)
+
+   it("allows defining fields", function()
+      assert.equal([[
+Checking spec/samples/indirect_globals.lua        2 warnings
+
+    spec/samples/indirect_globals.lua:2:11-16: accessing undefined variable 'global'
+    spec/samples/indirect_globals.lua:5:32-37: accessing undefined variable 'global'
+
+Total: 2 warnings / 0 errors in 1 file
+]], get_output "spec/samples/indirect_globals.lua --std=min --globals table.concat.foo --ranges --no-config")
+   end)
+
+   it("detects issues related to global fields", function()
+      assert.equal([[
+Checking spec/samples/global_fields.lua           13 warnings / 1 error
+
+    spec/samples/global_fields.lua:2:16: indirectly accessing undefined field 'upsert' of global 'table'
+    spec/samples/global_fields.lua:8:1: indirectly setting undefined field 'insert.foo' of global 'table'
+    spec/samples/global_fields.lua:23:7: accessing undefined field 'gfind' of global 'string'
+    spec/samples/global_fields.lua:27:7: accessing undefined field 'find' of global 'string'
+    spec/samples/global_fields.lua:32:7: accessing undefined variable 'server'
+    spec/samples/global_fields.lua:33:7: accessing undefined variable 'server'
+    spec/samples/global_fields.lua:34:1: mutating non-standard global variable 'server'
+    spec/samples/global_fields.lua:35:1: mutating non-standard global variable 'server'
+    spec/samples/global_fields.lua:36:1: mutating non-standard global variable 'server'
+    spec/samples/global_fields.lua:37:7: accessing undefined variable 'server'
+    spec/samples/global_fields.lua:38:1: mutating non-standard global variable 'server'
+    spec/samples/global_fields.lua:40:1: invalid inline option
+    spec/samples/global_fields.lua:41:1: mutating non-standard global variable 'server'
+    spec/samples/global_fields.lua:42:1: mutating non-standard global variable 'server'
+
+Total: 13 warnings / 1 error in 1 file
+]], get_output "spec/samples/global_fields.lua --no-config")
+
+      assert.equal([[
+Checking spec/samples/global_fields.lua           7 warnings
+
+    spec/samples/global_fields.lua:2:16: indirectly accessing undefined field 'upsert' of global 'table'
+    spec/samples/global_fields.lua:8:1: indirectly setting undefined field 'insert.foo' of global 'table'
+    spec/samples/global_fields.lua:23:7: accessing undefined field 'gfind' of global 'string'
+    spec/samples/global_fields.lua:27:7: accessing undefined field 'find' of global 'string'
+    spec/samples/global_fields.lua:34:1: setting undefined field 'foo' of global 'server'
+    spec/samples/global_fields.lua:35:1: setting undefined field 'bar.?' of global 'server'
+    spec/samples/global_fields.lua:37:7: accessing undefined field 'baz.abcd' of global 'server'
+
+Total: 7 warnings / 0 errors in 1 file
+]], get_output "spec/samples/global_fields.lua --config=spec/configs/custom_fields_config.luacheckrc")
    end)
 
    it("allows showing warning codes", function()
@@ -575,7 +658,7 @@ Total: 3 warnings / 0 errors in 1 file
 Checking spec/samples/read_globals.lua            5 warnings
 
     spec/samples/read_globals.lua:1:1: (W121) setting read-only global variable 'string'
-    spec/samples/read_globals.lua:2:1: (W122) mutating read-only global variable 'table'
+    spec/samples/read_globals.lua:2:1: (W142) setting undefined field 'append' of global 'table'
     spec/samples/read_globals.lua:5:1: (W121) setting read-only global variable 'bar'
     spec/samples/read_globals.lua:6:1: (W112) mutating non-standard global variable 'baz'
     spec/samples/read_globals.lua:6:21: (W113) accessing undefined variable 'baz'
@@ -669,7 +752,7 @@ Total: 5 warnings / 0 errors in 1 file
 Checking spec/samples/read_globals_inline_options.lua 3 warnings
 
     spec/samples/read_globals_inline_options.lua:3:1: setting read-only global variable 'foo'
-    spec/samples/read_globals_inline_options.lua:3:16: mutating read-only global variable 'baz'
+    spec/samples/read_globals_inline_options.lua:3:16: setting read-only field '?' of global 'baz'
     spec/samples/read_globals_inline_options.lua:5:1: setting read-only global variable 'foo'
 
 Total: 3 warnings / 0 errors in 1 file
@@ -794,22 +877,25 @@ Total: 16 warnings / 1 error in 4 files
 
          local cache = utils.read_file(tmpname)
          assert.string(cache)
+
+         -- luacheck: push no max line length
          local format_version, good_mtime, bad_mtime, python_mtime = cache:match((([[
 
 (%d+)
 spec/samples/good_code.lua
 (%d+)
-return {{},{}}
+return {{},{},{19,0,23,17,3,0,30,25,26,3,0,15}}
 spec/samples/bad_code.lua
 (%d+)
-return {{{"112","package",1,1,7},{"211","helper",3,16,21,[10]=true},{"212","...",3,23,25},{"111","embrace",7,10,16,[11]=true},{"412","opt",8,10,12,7,18},{"113","hepler",9,11,16}},{}}
+local A,B,C="package","embrace","hepler";return {{{"112",A,1,1,7,[23]={A,"loaded",true}},{"211","helper",3,16,21,[10]=true},{"212","...",3,23,25},{"111",B,7,10,16,[11]=true,[23]={B}},{"412","opt",8,10,12,7,18},{"113",C,9,11,16,[23]={C}}},{},{24,0,26,9,3,0,21,31,26,3,0}}
 spec/samples/python_code.lua
 (%d+)
-return {{{"011",[3]=1,[4]=6,[5]=15,[12]="expected '=' near '__future__'"}},{}}
+return {{{"011",[3]=1,[4]=6,[5]=15,[12]="expected '=' near '__future__'"}},{},{}}
 ]]):gsub("[%[%]]", "%%%0")))
+         -- luacheck: pop
 
          format_version = tonumber(format_version)
-         assert.number(format_version)
+         assert.number(format_version, "Cache string is:" .. cache)
          assert.string(good_mtime)
          assert.string(bad_mtime)
          assert.string(python_mtime)
@@ -823,19 +909,21 @@ return {{{"011",[3]=1,[4]=6,[5]=15,[12]="expected '=' near '__future__'"}},{}}
 %s
 spec/samples/python_code.lua
 %s
-return {{{"111", "global", 1, 1}, {"321", "uninit", 6, 8}},{}}
+return {{{"111", "global", 1, 1, [23]={"global"}}, {"321", "uninit", 6, 8}},{},{}}
 spec/samples/good_code.lua
 %s
-return {{{"011",[3]=5,[4]=7,[12]="this code is actually bad"}},{}}
+return {{{"011",[3]=5,[4]=7,[12]="this code is actually bad"}},{},{}}
 spec/samples/bad_code.lua
 %s
-return {{},{}}]]):format(version, python_mtime, good_mtime, tostring(tonumber(bad_mtime) - 1)))
+return {{},{},{}}]]):format(version, python_mtime, good_mtime, tostring(tonumber(bad_mtime) - 1)))
             fh:close()
          end
 
          write_new_cache("\n"..tostring(format_version))
-         assert.equal(mocked_output, get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua spec/samples/unused_code.lua --std=lua52 --no-config --cache "..tmpname))
-         assert.equal(mocked_output, get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua spec/samples/unused_code.lua --std=lua52 --no-config --cache "..tmpname))
+         assert.equal(mocked_output,
+            get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua spec/samples/unused_code.lua --std=lua52 --no-config --cache "..tmpname))
+         assert.equal(mocked_output,
+            get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua spec/samples/unused_code.lua --std=lua52 --no-config --cache "..tmpname))
 
          write_new_cache("\n"..tostring(format_version + 1))
          assert.equal(normal_output, get_output("spec/samples/good_code.lua spec/samples/bad_code.lua spec/samples/python_code.lua --std=lua52 --no-config --cache "..tmpname))
@@ -969,7 +1057,7 @@ spec/samples/python_code.lua:1:6: (E011) expected '=' near '__future__'
    end)
 
    it("expands folders", function()
-      assert.matches("^Total: %d+ warnings / %d+ errors in 22 files\n$", get_output "spec/samples -qqq --no-config")
+      assert.matches("^Total: %d+ warnings / %d+ errors in 23 files\n$", get_output "spec/samples -qqq --no-config --exclude-files spec/samples/global_fields.lua")
    end)
 
    it("uses --include-files when expanding folders", function()
@@ -1114,13 +1202,14 @@ Codes: true
 
          it("uses exclude_files option", function()
             assert.equal(([[
-Checking spec/samples/argparse.lua                7 warnings
+Checking spec/samples/argparse.lua                9 warnings
 Checking spec/samples/compat.lua                  4 warnings
 Checking spec/samples/custom_std_inline_options.lua 3 warnings / 1 error
 Checking spec/samples/global_inline_options.lua   3 warnings
 Checking spec/samples/globals.lua                 2 warnings
 Checking spec/samples/indirect_globals.lua        3 warnings
 Checking spec/samples/inline_options.lua          7 warnings / 2 errors
+Checking spec/samples/line_length.lua             4 warnings
 Checking spec/samples/python_code.lua             1 error
 Checking spec/samples/read_globals.lua            5 warnings
 Checking spec/samples/read_globals_inline_options.lua 3 warnings
@@ -1128,20 +1217,21 @@ Checking spec/samples/redefined.lua               7 warnings
 Checking spec/samples/unused_code.lua             9 warnings
 Checking spec/samples/unused_secondaries.lua      4 warnings
 
-Total: 57 warnings / 4 errors in 15 files
+Total: 63 warnings / 4 errors in 16 files
 ]]):gsub("(spec/samples)/", "%1"..package.config:sub(1, 1)),
-            get_output "spec/samples --config=spec/configs/exclude_files_config.luacheckrc -qq")
+            get_output "spec/samples --config=spec/configs/exclude_files_config.luacheckrc -qq --exclude-files spec/samples/global_fields.lua")
          end)
 
          it("loads exclude_files option correctly from upper directory", function()
             assert.equal([[
-Checking argparse.lua                             7 warnings
+Checking argparse.lua                             9 warnings
 Checking compat.lua                               4 warnings
 Checking custom_std_inline_options.lua            3 warnings / 1 error
 Checking global_inline_options.lua                3 warnings
 Checking globals.lua                              2 warnings
 Checking indirect_globals.lua                     3 warnings
 Checking inline_options.lua                       7 warnings / 2 errors
+Checking line_length.lua                          4 warnings
 Checking python_code.lua                          1 error
 Checking read_globals.lua                         5 warnings
 Checking read_globals_inline_options.lua          3 warnings
@@ -1149,26 +1239,27 @@ Checking redefined.lua                            7 warnings
 Checking unused_code.lua                          9 warnings
 Checking unused_secondaries.lua                   4 warnings
 
-Total: 57 warnings / 4 errors in 15 files
-]], get_output(". --config=spec/configs/exclude_files_config.luacheckrc -qq", "spec/samples/"))
+Total: 63 warnings / 4 errors in 16 files
+]], get_output(". --config=spec/configs/exclude_files_config.luacheckrc -qq --exclude-files global_fields.lua", "spec/samples/"))
          end)
 
          it("combines excluded files from config and cli", function()
             assert.equal([[
-Checking argparse.lua                             7 warnings
+Checking argparse.lua                             9 warnings
 Checking compat.lua                               4 warnings
 Checking custom_std_inline_options.lua            3 warnings / 1 error
 Checking global_inline_options.lua                3 warnings
 Checking globals.lua                              2 warnings
 Checking indirect_globals.lua                     3 warnings
 Checking inline_options.lua                       7 warnings / 2 errors
+Checking line_length.lua                          4 warnings
 Checking python_code.lua                          1 error
 Checking redefined.lua                            7 warnings
 Checking unused_code.lua                          9 warnings
 Checking unused_secondaries.lua                   4 warnings
 
-Total: 49 warnings / 4 errors in 13 files
-]], get_output(". --config=spec/configs/exclude_files_config.luacheckrc -qq --exclude-files " .. quote("./read*"), "spec/samples/"))
+Total: 55 warnings / 4 errors in 14 files
+]], get_output(". --config=spec/configs/exclude_files_config.luacheckrc -qq --exclude-files global_fields.lua --exclude-files " .. quote("./read*"), "spec/samples/"))
          end)
 
          it("allows defining custom stds", function()

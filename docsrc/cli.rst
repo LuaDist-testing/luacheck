@@ -69,26 +69,28 @@ Option                                  Meaning
 ``--no-self``                           Filter out warnings related to implicit ``self`` argument.
 ``--std <std>``                         Set standard globals. ``<std>`` can be one of:
 
-                                        * ``_G`` - globals of the Lua interpreter ``luacheck`` runs on (default);
-                                        * ``lua51`` - globals of Lua 5.1;
+                                        * ``lua51`` - globals of Lua 5.1 without deprecated ones;
+                                        * ``lua51c`` - globals of Lua 5.1;
                                         * ``lua52`` - globals of Lua 5.2;
                                         * ``lua52c`` - globals of Lua 5.2 compiled with LUA_COMPAT_ALL;
                                         * ``lua53`` - globals of Lua 5.3; 
                                         * ``lua53c`` - globals of Lua 5.3 compiled with LUA_COMPAT_5_2; 
                                         * ``luajit`` - globals of LuaJIT 2.0;
                                         * ``ngx_lua`` - globals of Openresty `lua-nginx-module <https://github.com/openresty/lua-nginx-module>`_ with LuaJIT 2.0;
-                                        * ``rockspec`` - globals allowed in rockspecs;
                                         * ``min`` - intersection of globals of Lua 5.1, Lua 5.2, Lua 5.3 and LuaJIT 2.0;
                                         * ``max`` - union of globals of Lua 5.1, Lua 5.2, Lua 5.3 and LuaJIT 2.0;
+                                        * ``_G``  (default) - same as ``lua51c``, ``lua52c``, ``lua53c``, or ``luajit`` depending on version of Lua used
+                                          to run ``luacheck`` or same as ``max`` if couldn't detect the version;
                                         * ``busted`` - globals added by Busted 2.0;
+                                        * ``rockspec`` - globals allowed in rockspecs;
                                         * ``none`` - no standard globals.
 
                                         See :ref:`stds`
-``--globals [<global>] ...``            Add custom globals on top of standard ones.
-``--read-globals [<global>] ...``       Add read-only globals.
-``--new-globals [<global>] ...``        Set custom globals. Removes custom globals added previously.
-``--new-read-globals [<global>] ...``   Set read-only globals. Removes read-only globals added previously.
-``--not-globals [<global>] ...``        Remove custom and standard globals.
+``--globals [<name>] ...``              Add custom global variables or fields on top of standard ones. See :ref:`fields`
+``--read-globals [<name>] ...``         Add read-only global variables or fields.
+``--new-globals [<name>] ...``          Set custom global variables or fields. Removes custom globals added previously.
+``--new-read-globals [<name>] ...``     Set read-only global variables or fields. Removes read-only globals added previously.
+``--not-globals [<name>] ...``          Remove custom and standard global variables or fields.
 ``-c | --compat``                       Equivalent to ``--std max``.
 ``-d | --allow-defined``                Allow defining globals implicitly by setting them.
 
@@ -99,6 +101,8 @@ Option                                  Meaning
 ``-m | --module``                       Limit visibility of implicitly defined globals to their files.
 
                                         See :ref:`modules`
+``--max-line-length <length``           Set maximum allowed line length (default: 120).
+``--no-max-line-length``                Do not limit line length.
 ``--ignore | -i <patt> [<patt>] ...``   Filter out warnings matching patterns.
 ``--enable | -e <patt> [<patt>] ...``   Do not filter out warnings matching patterns.
 ``--only | -o <patt> [<patt>] ...``     Filter out warnings not matching patterns.
@@ -147,12 +151,19 @@ Pattern Matching warnings
 
 Unless already anchored, patterns matching variable names are anchored at both sides and patterns matching warning codes are anchored at their beginnings. This allows one to filter warnings by category (e.g. ``--only 1`` focuses ``luacheck`` on global-related warnings).
 
+.. _fields:
+
+Defining extra globals and fields
+---------------------------------
+
+CLI options ``--globals``, ``--new-globals``, ``--read-globals``, ``--new-read-globals``, and corresponding config options add new allowed globals or fields. E.g. ``--read-globals foo --globals foo.bar`` allows accessing ``foo`` global and mutating its ``bar`` field. ``--not-globals`` also operates on globals and fields and removes definitions of both standard and custom globals.
+
 .. _stds:
 
 Sets of standard globals
 ------------------------
 
-CLI option ``--stds`` allows combining built-in sets described above using ``+``. For example, ``--std max`` is equivalent to ``--std=lua51+lua52+lua53``. Leading plus sign adds new sets to default one instead of replacing it. For instance, ``--std +busted`` is suitable for checking test files that use `Busted <http://olivinelabs.com/busted/>`_ testing framework. Custom sets of globals can be defined by mutating global variable ``stds`` in config. See :ref:`custom_stds`
+CLI option ``--stds`` allows combining built-in sets described above using ``+``. For example, ``--std max`` is equivalent to ``--std=lua51c+lua52c+lua53c+luajit``. Leading plus sign adds new sets to default one instead of replacing it. For instance, ``--std +busted`` is suitable for checking test files that use `Busted <http://olivinelabs.com/busted/>`_ testing framework. Custom sets of globals can be defined by mutating global variable ``stds`` in config. See :ref:`custom_stds`
 
 Formatters
 ----------
