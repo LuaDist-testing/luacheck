@@ -83,9 +83,9 @@ local function add_inline_option(events, per_line_opts, body, location, is_code_
       return true
    end
 
-   local options = get_options(body)
+   local opts = get_options(body)
 
-   if not options then
+   if not opts then
       return false
    end
 
@@ -94,9 +94,9 @@ local function add_inline_option(events, per_line_opts, body, location, is_code_
          per_line_opts[location.line] = {}
       end
 
-      table.insert(per_line_opts[location.line], options)
+      table.insert(per_line_opts[location.line], opts)
    else
-      table.insert(events, {options = options, line = location.line, column = location.column})
+      table.insert(events, {options = opts, line = location.line, column = location.column})
    end
 
    return true
@@ -249,6 +249,7 @@ end
 --    .definition is added to global set warnings (111) that are implicit definitions due to inline options;
 --    .in_module is added to 111 warnings that are in module due to inline options.
 --    .read_only is added to 111 and 112 warnings related to read only globals.
+--    .global is added to 111 and 112 related to regular globals.
 -- Invalid comments have same shape as warnings except they don't have .code field.
 -- Instead, they may have .invalid or .unpaired field for syntactically invalid inline options and unpaired
 --    push/pop options, correspondingly.

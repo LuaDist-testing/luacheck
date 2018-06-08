@@ -1,19 +1,20 @@
 package = "luacheck"
-version = "scm-8"
+version = "0.10.0-1"
 source = {
-   url = "git://github.com/mpeterv/luacheck.git"
+   url = "git://github.com/mpeterv/luacheck",
+   tag = "0.10.0"
 }
 description = {
-   summary = "A simple static analyzer for Lua",
+   summary = "A static analyzer and a linter for Lua",
    detailed = [[
-Luacheck is a tool for linting and static analysis of Lua code. It is able to spot usage of undefined global variables, unused local variables and a few other typical problems within Lua programs.
+Luacheck is a command-line tool for linting and static analysis of Lua code. It is able to spot usage of undefined global variables, unused local variables and a few other typical problems within Lua programs.
 ]],
    homepage = "https://github.com/mpeterv/luacheck",
-   license = "MIT/X11"
+   license = "MIT <http://opensource.org/licenses/MIT>"
 }
 dependencies = {
    "lua >= 5.1, < 5.4",
-   "luafilesystem >= 1.6.2"
+   "luafilesystem >= 1.6.3"
 }
 build = {
    type = "builtin",
@@ -28,9 +29,14 @@ build = {
       ["luacheck.lexer"] = "src/luacheck/lexer.lua",
       ["luacheck.filter"] = "src/luacheck/filter.lua",
       ["luacheck.options"] = "src/luacheck/options.lua",
+      ["luacheck.inline_options"] = "src/luacheck/inline_options.lua",
       ["luacheck.stds"] = "src/luacheck/stds.lua",
       ["luacheck.expand_rockspec"] = "src/luacheck/expand_rockspec.lua",
+      ["luacheck.multithreading"] = "src/luacheck/multithreading.lua",
+      ["luacheck.cache"] = "src/luacheck/cache.lua",
       ["luacheck.format"] = "src/luacheck/format.lua",
+      ["luacheck.version"] = "src/luacheck/version.lua",
+      ["luacheck.fs"] = "src/luacheck/fs.lua",
       ["luacheck.utils"] = "src/luacheck/utils.lua",
       ["luacheck.argparse"] = "src/luacheck/argparse.lua"
    },

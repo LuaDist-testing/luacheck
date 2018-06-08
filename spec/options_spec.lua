@@ -49,7 +49,7 @@ describe("options", function()
 
    describe("normalize", function()
       it("applies default values", function()
-         opts = options.normalize({})
+         local opts = options.normalize({})
          assert.same(opts, options.normalize({{}}))
 
          assert.is_true(opts.unused_secondaries)
@@ -77,7 +77,7 @@ describe("options", function()
       end)
 
       it("considers opts.std and opts.compat", function()
-         assert.same({baz = true}, options.normalize({
+         assert.same({baz = 1}, options.normalize({
             {
                std = "none"
             }, {
@@ -102,21 +102,21 @@ describe("options", function()
          })
          local globals = opts.globals
          local read_globals = opts.read_globals
-         assert.is_true(globals.foo)
-         assert.is_true(globals.bar)
+         assert.is_truthy(globals.foo)
+         assert.is_truthy(globals.bar)
          assert.is_nil(globals.baz)
-         assert.is_true(globals.quux)
-         assert.is_true(read_globals.quux)
-         assert.is_true(read_globals.string)
+         assert.is_truthy(globals.quux)
+         assert.is_truthy(read_globals.quux)
+         assert.is_truthy(read_globals.string)
          assert.is_nil(read_globals._ENV)
-         assert.is_true(globals.string)
-         assert.is_true(globals._ENV)
+         assert.is_truthy(globals.string)
+         assert.is_truthy(globals._ENV)
       end)
 
       it("considers macros, ignore, enable and only", function()
          assert.same({
                {{{nil, "^foo$"}}, "only"},
-               {{{"^31", nil}}, "disable"},
+               {{{"^21[23]", nil}}, "disable"},
                {{{"^[23]", nil}}, "enable"},
                {{{"^511", nil}}, "enable"},
                {{{"^412", nil}, {"1$", "^bar$"}}, "disable"}
@@ -127,7 +127,7 @@ describe("options", function()
                ignore = {"412", "1$/bar"}
             }, {
                unused = true,
-               unused_values = false,
+               unused_args = false,
                enable = {"511"}
             }, {
                only = {"foo"}

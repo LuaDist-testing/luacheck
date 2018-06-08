@@ -1,44 +1,6 @@
 local utils = require "luacheck.utils"
 
 describe("utils", function()
-   describe("is_dir", function()
-      it("returns true for directories", function()
-         assert.is_true(utils.is_dir("spec/folder"))
-      end)
-
-      it("returns false for files", function()
-         assert.is_false(utils.is_dir("spec/folder/foo"))
-      end)
-
-      it("returns false for non-existent paths", function()
-         assert.is_false(utils.is_dir("spec/folder/non-existent"))
-      end)
-   end)
-
-   describe("is_file", function()
-      it("returns true for files", function()
-         assert.is_true(utils.is_file("spec/folder/foo"))
-      end)
-
-      it("returns false for directories", function()
-         assert.is_false(utils.is_file("spec/folder"))
-      end)
-
-      it("returns false for non-existent paths", function()
-         assert.is_false(utils.is_file("spec/folder/non-existent"))
-      end)
-   end)
-
-   describe("extract_files", function()
-      it("returns sorted list of files in a directory matching pattern", function()
-         assert.same({
-            "spec/folder/folder1/fail",
-            "spec/folder/folder1/file",
-            "spec/folder/foo"
-         }, utils.extract_files("spec/folder", "^f"))
-      end)
-   end)
-
    describe("read_file", function()
       it("returns contents of a file", function()
          assert.equal("contents\n", utils.read_file("spec/folder/foo"))
@@ -46,6 +8,18 @@ describe("utils", function()
 
       it("returns nil for non-existent paths", function()
          assert.is_nil(utils.read_file("spec/folder/non-existent"))
+      end)
+   end)
+
+   describe("load", function()
+      it("loads function in an environment", function()
+         local f = utils.load("return g", {g = "foo"})
+         assert.is_function(f)
+         assert.is_equal("foo", f())
+      end)
+
+      it("returns nil on syntax error", function()
+         assert.is_nil(utils.load("return return", {}))
       end)
    end)
 
@@ -83,7 +57,7 @@ describe("utils", function()
 
    describe("array_to_set", function()
       it("converts array to set and returns it", function()
-         assert.same({foo = true, bar = true}, utils.array_to_set({"foo", "bar", "foo"}))
+         assert.same({foo = 3, bar = 2}, utils.array_to_set({"foo", "bar", "foo"}))
       end)
    end)
 
@@ -97,8 +71,124 @@ describe("utils", function()
       it("updates first table with entries from second", function()
          local t1 = {k1 = 1, k2 = 2}
          local t2 = {k2 = 3, k3 = 4}
-         utils.update(t1, t2)
+         local ret = utils.update(t1, t2)
          assert.same({k1 = 1, k2 = 3, k3 = 4}, t1)
+         assert.equal(t1, ret)
+      end)
+   end)
+
+   describe("class", function()
+      it("returns an object creator", function()
+         local cl = utils.class()
+         assert.is_table(cl)
+         cl.field = "foo"
+         local obj = cl()
+         assert.is_table(obj)
+         obj.field2 = "bar"
+         assert.equal("foo", obj.field)
+         assert.is_nil(cl.field2)
+      end)
+
+      it("calls __init on object creation", function()
+         local cl = utils.class()
+         cl.__init = spy.new(function() end)
+         local obj = cl("foo", "bar")
+         assert.spy(cl.__init).was_called(1)
+         assert.spy(cl.__init).was_called_with(obj, "foo", "bar")
+      end)
+   end)
+
+   describe("Stack", function()
+      it("supports push/pop operations and top/size fields", function()
+         local stack = utils.Stack()
+         assert.equal(0, stack.size)
+         assert.is_nil(stack.top)
+
+         stack:push(7)
+         stack:push(8)
+         assert.equal(2, stack.size)
+         assert.equal(8, stack.top)
+
+         assert.equal(8, stack:pop())
+         assert.equal(1, stack.size)
+         assert.equal(7, stack.top)
+
+         stack:push(4)
+         assert.equal(2, stack.size)
+         assert.equal(4, stack.top)
+
+         assert.equal(4, stack:pop())
+         assert.equal(7, stack:pop())
+         assert.equal(0, stack.size)
+         assert.is_nil(stack.top)
+      end)
+   end)
+
+   describe("pcall", function()
+      it("calls f with arg", function()
+         assert.equal(3, utils.pcall(math.sqrt, 9))
+      end)
+
+      it("returns nil, table if f throws a table", function()
+         local t = {"foo"}
+         local res, err = utils.pcall(function(x)
+            if x == 9 then
+               error(t)
+            else
+               return true
+            end
+         end, 9)
+         assert.is_nil(res)
+         assert.is_equal(t, err)
+      end)
+
+      it("rethrows if f crashes (throws not a table)", function()
+         assert.has_error(function() utils.pcall(error, "msg") end, "msg\nstack traceback:")
+      end)
+   end)
+
+   describe("ripairs", function()
+      it("returns reversed ipairs", function()
+         local arr = {foo = "bar", 5, 6, 7}
+         local iterated = {}
+
+         for i, v in utils.ripairs(arr) do
+            table.insert(iterated, {i, v})
+         end
+
+         assert.same({{3, 7}, {2, 6}, {1, 5}}, iterated)
+      end)
+   end)
+
+   describe("after", function()
+      it("returns substring after match", function()
+         assert.equal("foo bar: baz", utils.after("bar: foo bar: baz", "bar:%s*"))
+      end)
+
+      it("returns nil when there is no match", function()
+         assert.is_nil(utils.after("bar: foo bar: baz", "baz:%s*"))
+      end)
+   end)
+
+   describe("strip", function()
+      it("returns string without whitespace on ends", function()
+         assert.equal("foo bar", utils.strip("\tfoo bar\n   "))
+      end)
+   end)
+
+   describe("split", function()
+      it("without separator, returns non-whitespace substrings", function()
+         assert.same({"foo", "bar", "baz"}, utils.split(" foo    bar\n baz  "))
+      end)
+
+      it("with separator, returns substrings between them", function()
+         assert.same({"", "foo", " bar", "", " baz "}, utils.split(",foo, bar,, baz ", ","))
+      end)
+   end)
+
+   describe("map", function()
+      it("maps function over an array", function()
+         assert.same({3, 1, 2}, utils.map(math.sqrt, {9, 1, 4}))
       end)
    end)
 end)

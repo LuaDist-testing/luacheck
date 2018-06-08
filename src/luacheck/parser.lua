@@ -34,8 +34,8 @@ local function skip_token(state)
    end
 end
 
-local function init_ast_node(node, location, tag)
-   node.location = location
+local function init_ast_node(node, loc, tag)
+   node.location = loc
    node.tag = tag
    return node
 end
@@ -44,9 +44,40 @@ local function new_ast_node(state, tag)
    return init_ast_node({}, location(state), tag)
 end
 
+local token_names = {
+   TK_EOS = "<eof>",
+   TK_NAME = "identifier",
+   TK_DO = "'do'",
+   TK_END = "'end'",
+   TK_THEN = "'then'",
+   TK_IN = "'in'",
+   TK_UNTIL = "'until'",
+   TK_DBCOLON = "'::'"
+}
+
+local function token_name(token)
+   return token_names[token] or lexer.quote(token)
+end
+
+local function token_repr(state)
+   if state.token == "TK_EOS" then
+      return "<eof>"
+   else
+      local token_body = state.lexer.src:sub(state.offset, state.lexer.offset - 1)
+      -- Take first line.
+      return lexer.quote(token_body:match("^[^\r\n]*"))
+   end
+end
+
+local function parse_error(state, msg)
+   lexer.syntax_error(state.line, state.column, state.offset,
+      (msg or "syntax error") .. " near " .. token_repr(state)
+   )
+end
+
 local function check_token(state, token)
    if state.token ~= token then
-      error({})
+      parse_error(state, "expected " .. token_name(token))
    end
 end
 
@@ -213,7 +244,7 @@ local function parse_function(state, location_)
             args[#args+1] = parse_dots(state)
             break
          else
-            error({})
+            parse_error(state, "expected argument")
          end
       until not test_and_skip_token(state, ",")
    end
@@ -240,7 +271,7 @@ local function parse_prefix_expression(state)
       check_and_skip_token(state, ")")
       return expression
    else
-      error({})
+      parse_error(state, "unexpected symbol")
    end
 end
 
@@ -261,7 +292,8 @@ local function parse_call_arguments(state)
    elseif state.token == "TK_STRING" then
       return {parse_string(state)}
    else
-      error({})
+      -- Can only happen at method invocation (expr:name <invalid_token>).
+      parse_error(state, "expected method arguments")
    end
 end
 
@@ -500,7 +532,7 @@ local function parse_for(state)
       check_and_skip_token(state, "TK_DO")
       ast_node[3] = parse_block(state)
    else
-      error({})
+      parse_error(state, "expected '=', ',' or 'in'")
    end
 
    check_and_skip_token(state, "TK_END")
@@ -627,13 +659,13 @@ local function parse_expression_statement(state)
 
       if is_prefix and first_token == "(" then
          -- (expr) is invalid.
-         error({})
+         parse_error(state)
       end
 
       if primary_expression.tag == "Call" or primary_expression.tag == "Invoke" then
          if lhs then
             -- This is an assingment, and a call is not a valid lvalue.
-            error({})
+            parse_error(state)
          else
             -- It is a call.
             return primary_expression
@@ -668,8 +700,8 @@ local function parse_statement(state)
    return (statements[state.token] or parse_expression_statement)(state)
 end
 
-function parse_block(state, location)
-   local block = {location = location}
+function parse_block(state, loc)
+   local block = {location = loc}
 
    while not closing_tokens[state.token] do
       local first_token = state.token
@@ -685,7 +717,7 @@ function parse_block(state, location)
             test_and_skip_token(state, ";")
             
             if not closing_tokens[state.token] then
-               error({})
+               parse_error(state, "expected end of block")
             end
          end
       end

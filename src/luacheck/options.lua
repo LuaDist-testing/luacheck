@@ -7,8 +7,8 @@ local function boolean(x)
    return type(x) == "boolean"
 end
 
-local function number(x)
-   return type(x) == "number"
+local function natural(x)
+   return type(x) == "number" and x >= 1
 end
 
 local function array_of_strings(x)
@@ -23,6 +23,10 @@ local function array_of_strings(x)
    end
 
    return true
+end
+
+local function boolean_or_string(x)
+   return type(x) == "boolean" or type(x) == "string"
 end
 
 local function std_or_array_of_strings(x)
@@ -51,9 +55,7 @@ options.config_options = {
    unused = boolean,
    redefined = boolean,
    unused_args = boolean,
-   unused_values = boolean,
    unused_secondaries = boolean,
-   unset = boolean,
    unused_globals = boolean,
    std = std_or_array_of_strings,
    inline = boolean
@@ -62,10 +64,11 @@ utils.update(options.config_options, options.single_inline_options)
 utils.update(options.config_options, options.multi_inline_options)
 
 options.top_config_options = {
-   limit = number,
    color = boolean,
    codes = boolean,
-   formatter = string
+   formatter = string,
+   cache = boolean_or_string,
+   jobs = natural
 }
 utils.update(options.top_config_options, options.config_options)
 
@@ -199,8 +202,6 @@ end
 local macros = {
    {"unused_globals", "13"},
    {"unused_args", "21[23]"},
-   {"unset", "22"},
-   {"unused_values", "31"},
    {"global", "1"},
    {"unused", "[23]"},
    {"redefined", "4"}

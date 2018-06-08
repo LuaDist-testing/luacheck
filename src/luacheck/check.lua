@@ -16,10 +16,6 @@ function ChState:__init()
    self.warnings = {}
 end
 
-function ChState.syntax_error()
-   error({})
-end
-
 function ChState:warn(warning)
    table.insert(self.warnings, warning)
 end
@@ -113,14 +109,16 @@ function ChState:warn_uninit(node)
 end
 
 function ChState:warn_redefined(var, prev_var, same_scope)
-   self:warn({
-      code = "4" .. (same_scope and "1" or "2") .. type_codes[prev_var.type],
-      name = var.name,
-      line = var.location.line,
-      column = var.location.column,
-      prev_line = prev_var.location.line,
-      prev_column = prev_var.location.column
-   })
+   if var.name ~= "..." then
+      self:warn({
+         code = "4" .. (same_scope and "1" or (var.line == prev_var.line and "2" or "3")) .. type_codes[prev_var.type],
+         name = var.name,
+         line = var.location.line,
+         column = var.location.column,
+         prev_line = prev_var.location.line,
+         prev_column = prev_var.location.column
+      })
+   end
 end
 
 function ChState:warn_unreachable(location, unrepeatable)
@@ -158,7 +156,7 @@ end
 
 --- Checks source.
 -- Returns an array of warnings.
--- Raises {} on syntax errors.
+-- Raises {line = line, column = column, offset = offset, msg = msg} on syntax errors.
 local function check(src)
    local ast, comments, code_lines = parse(src)
    local chstate = ChState()

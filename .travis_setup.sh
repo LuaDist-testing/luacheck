@@ -5,16 +5,16 @@
 set -e
 
 if [ "$LUA" == "LuaJIT 2.0" ]; then
-  wget -O - http://luajit.org/download/LuaJIT-2.0.2.tar.gz | tar xz
-  cd LuaJIT-2.0.2
+  wget -O - http://luajit.org/download/LuaJIT-2.0.3.tar.gz | tar xz
+  cd LuaJIT-2.0.3
   make && sudo make install INSTALL_TSYMNAME=lua;
 else
   if [ "$LUA" == "Lua 5.1" ]; then
     wget -O - http://www.lua.org/ftp/lua-5.1.5.tar.gz | tar xz
     cd lua-5.1.5;
   elif [ "$LUA" == "Lua 5.2" ]; then
-    wget -O - http://www.lua.org/ftp/lua-5.2.3.tar.gz | tar xz
-    cd lua-5.2.3;
+    wget -O - http://www.lua.org/ftp/lua-5.2.4.tar.gz | tar xz
+    cd lua-5.2.4;
   elif [ "$LUA" == "Lua 5.3" ]; then
     wget -O - http://www.lua.org/ftp/lua-5.3.0.tar.gz | tar xz
     cd lua-5.3.0;

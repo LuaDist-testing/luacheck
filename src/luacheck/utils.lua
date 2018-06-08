@@ -1,67 +1,7 @@
 local utils = {}
 
-local dir_sep = package.config:sub(1,1)
-
-utils.is_windows = dir_sep == "\\"
-
-local has_lfs, lfs = pcall(require, "lfs")
-
-if has_lfs then
-   -- Returns whether path points to a directory. 
-   function utils.is_dir(path)
-      return lfs.attributes(path, "mode") == "directory"
-   end
-
-   -- Returns whether path points to a file. 
-   function utils.is_file(path)
-      return lfs.attributes(path, "mode") == "file"
-   end
-
-   -- Returns list of all files in directory matching pattern. 
-   function utils.extract_files(dir_path, pattern)
-      local res = {}
-
-      local function scan(dir_path)
-         for path in lfs.dir(dir_path) do
-            if path ~= "." and path ~= ".." then
-               local full_path = dir_path .. dir_sep .. path
-
-               if utils.is_dir(full_path) then
-                  scan(full_path)
-               elseif path:match(pattern) and utils.is_file(full_path) then
-                  table.insert(res, full_path)
-               end
-            end
-         end
-      end
-
-      scan(dir_path)
-      table.sort(res)
-      return res
-   end
-else
-   -- No luafilesystem. Effectively disable recursive directory checking.
-   -- Using something like os.execute("ls") may be possible but is a hack.
-
-   function utils.is_dir(_)
-      return false
-   end
-
-   function utils.is_file(path)
-      local fh = io.open(path)
-
-      if fh then
-         fh:close()
-         return true
-      else
-         return false
-      end
-   end
-
-   function utils.extract_files(_, _)
-      return {}
-   end
-end
+utils.dir_sep = package.config:sub(1,1)
+utils.is_windows = utils.dir_sep == "\\"
 
 -- Returns all contents of file(path or file handler) or nil. 
 function utils.read_file(file)
@@ -74,22 +14,29 @@ function utils.read_file(file)
    end) and res or nil
 end
 
--- Parses rockspec-like source, returns data or nil. 
-local function capture_env(src, env)
-   -- luacheck: compat
-   env = env or {}
-   local func
-
-   if _VERSION:find "5.1" then
-      func = loadstring(src)
+-- luacheck: push
+-- luacheck: compat
+if _VERSION:find "5.1" then
+   -- Loads Lua source string in an environment, returns function or nil.
+   function utils.load(src, env)
+      local func = loadstring(src)
 
       if func then
-         setfenv(func, env)
+         return setfenv(func, env)
       end
-   else
-      func = load(src, nil, "t", env)
    end
+else
+   -- Loads Lua source string in an environment, returns function or nil.
+   function utils.load(src, env)
+      return load(src, nil, "t", env)
+   end
+end
+-- luacheck: pop
 
+-- Parses rockspec-like source, returns data or nil. 
+local function capture_env(src, env)
+   env = env or {}
+   local func = utils.load(src, env)
    return func and pcall(func) and env
 end
 
@@ -114,8 +61,8 @@ end
 function utils.array_to_set(array)
    local set = {}
 
-   for _, item in ipairs(array) do
-      set[item] = true
+   for index, value in ipairs(array) do
+      set[value] = index
    end
 
    return set
@@ -180,15 +127,14 @@ function utils.Stack:pop()
 end
 
 local function error_handler(err)
-   if type(err) == "table" then
-      return false
-   else
-      return tostring(err) .. "\n" .. debug.traceback()
-   end
+   return {
+      err = err,
+      traceback = debug.traceback()
+   }
 end
 
 -- Calls f with arg, returns what it does.
--- If f throws a table, returns nil.
+-- If f throws a table, returns nil, the table.
 -- If f throws not a table, rethrows.
 function utils.pcall(f, arg)
    local function task()
@@ -199,10 +145,10 @@ function utils.pcall(f, arg)
 
    if ok then
       return res
-   elseif not res then
-      return nil
+   elseif type(res.err) == "table" then
+      return nil, res.err
    else
-      error(res, 0)
+      error(tostring(res.err) .. "\n" .. res.traceback, 0)
    end
 end
 
@@ -250,6 +196,17 @@ function utils.split(str, sep)
    end
 
    return parts
+end
+
+-- Maps func over array.
+function utils.map(func, array)
+   local res = {}
+
+   for i, item in ipairs(array) do
+      res[i] = func(item)
+   end
+
+   return res
 end
 
 return utils
