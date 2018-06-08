@@ -53,14 +53,14 @@ local function capture_env(src, env)
    env = env or {}
    local func
 
-   if _VERSION:find "5.2" then
-      func = load(src, nil, "t", env)
-   else
+   if _VERSION:find "5.1" then
       func = loadstring(src)
 
       if func then
          setfenv(func, env)
       end
+   else
+      func = load(src, nil, "t", env)
    end
 
    return func and pcall(func) and env
@@ -104,6 +104,12 @@ function utils.concat_arrays(array)
    end
 
    return res
+end
+
+function utils.update(t1, t2)
+   for k, v in pairs(t2) do
+      t1[k] = v
+   end
 end
 
 return utils

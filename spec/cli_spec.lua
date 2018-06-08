@@ -287,6 +287,27 @@ Total: 6 warnings / 0 errors in 1 file
 ]], get_output "spec/samples/unused_code.lua --no-unused-values")
    end)
 
+   it("allows to ignore unused secondary values and variables", function()
+      assert.equal([[
+Checking spec/samples/unused_secondaries.lua      Failure
+
+    spec/samples/unused_secondaries.lua:3:7: unused variable a
+    spec/samples/unused_secondaries.lua:6:7: unused variable x
+    spec/samples/unused_secondaries.lua:6:13: unused variable z
+    spec/samples/unused_secondaries.lua:10:1: value assigned to variable o is unused
+
+Total: 4 warnings / 0 errors in 1 file
+]], get_output "spec/samples/unused_secondaries.lua")
+
+      assert.equal([[
+Checking spec/samples/unused_secondaries.lua      Failure
+
+    spec/samples/unused_secondaries.lua:6:7: unused variable x
+
+Total: 1 warning / 0 errors in 1 file
+]], get_output "spec/samples/unused_secondaries.lua -s")
+   end)
+
    it("handles errors gracefully", function()
       assert.equal([[
 Checking spec/samples/python_code.lua             Syntax error
@@ -340,6 +361,29 @@ Checking spec/samples/defined.lua                 Failure
 
 Total: 1 warning / 0 errors in 2 files
 ]], get_output "spec/samples/defined2.lua spec/samples/defined.lua -d")
+   end)
+
+   it("allows restricting scope of defined globals to the file with their definition", function()
+      assert.equal([[
+Checking spec/samples/defined2.lua                Failure
+
+    spec/samples/defined2.lua:1:1: accessing undefined variable foo
+
+Checking spec/samples/defined3.lua                OK
+
+Total: 1 warning / 0 errors in 2 files
+]], get_output "spec/samples/defined2.lua spec/samples/defined3.lua -d -m")
+   end)
+
+   it("allows ignoring globals defined in top level scope", function()
+      assert.equal([[
+Checking spec/samples/defined4.lua                Failure
+
+    spec/samples/defined4.lua:1:10: unused global variable foo
+    spec/samples/defined4.lua:3:4: setting non-standard global variable bar
+
+Total: 2 warnings / 0 errors in 1 file
+]], get_output "spec/samples/defined4.lua -t")
    end)
 
    it("detects unused defined globals", function()
@@ -398,6 +442,6 @@ Total: 0 warnings / 0 errors in 2 files
    end)
 
    it("expands folders", function()
-      assert.equal("Total: 29 warnings / 1 error in 11 files\n", get_output "spec/samples -qqq")
+      assert.equal("Total: 36 warnings / 1 error in 13 files\n", get_output "spec/samples -qqq")
    end)
 end)

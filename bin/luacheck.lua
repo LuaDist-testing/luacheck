@@ -1,5 +1,5 @@
 #!/bin/env lua
-local version = "0.6.0"
+local version = "0.7.0"
 
 local function fatal(msg)
    io.stderr:write("Fatal error: "..msg.."\n")
@@ -38,10 +38,15 @@ local function main()
          :description "Filter out warnings related to redefined variables. "
       parser:flag "-u" "--no-unused"
          :description "Filter out warnings related to unused variables. "
+
       parser:flag "-a" "--no-unused-args"
-         :description "ilter out warnings related to unused arguments and loop variables. "
+         :description "Filter out warnings related to unused arguments and loop variables. "
       parser:flag "-v" "--no-unused-values"
          :description "Filter out warnings related to unused values. "
+      parser:flag "-s" "--no-unused-secondaries"
+         :description "Filter out warnings related to unused variables set together with used ones. "
+      parser:flag "--no-unset"
+         :description "Filter out warnings related to unset variables. "
 
       parser:option "--std"
          :description [[Set standard globals. <std> must be one of:
@@ -53,8 +58,6 @@ local function main()
       min - intersection of globals of Lua 5.1, Lua 5.2 and LuaJIT 2.0; 
       max - union of globals of Lua 5.1, Lua 5.2 and LuaJIT 2.0; 
       none - no standard globals. ]]
-         :default "_G"
-         :show_default(false)
          :convert(stds)
       parser:option "--globals"
          :description "Add custom globals on top of standard ones. "
@@ -69,7 +72,11 @@ local function main()
       parser:flag "-c" "--compat"
          :description "Equivalent to --std=max. "
       parser:flag "-d" "--allow-defined"
-         :description "Allow defining globals by setting them. "
+         :description "Allow defining globals implicitly by setting them. "
+      parser:flag "-t" "--allow-defined-top"
+         :description "Allow defining globals implicitly by setting them in the top level scope. "
+      parser:flag "-m" "--module"
+         :description "Limit visibility of implicitly defined globals to their files. "
       parser:flag "--no-unused-globals"
          :description "Filter out warnings related to set but unused global variables. "
 
@@ -183,7 +190,7 @@ local function main()
    local function get_options(args)
       local res = {}
 
-      for _, argname in ipairs {"allow_defined", "compat", "std"} do
+      for _, argname in ipairs {"allow_defined", "allow_defined_top", "module", "compat", "std"} do
          if args[argname] then
             res[argname] = args[argname]
          end
@@ -195,6 +202,8 @@ local function main()
             unused = "no_unused",
             unused_args = "no_unused_args",
             unused_values = "no_unused_values",
+            unused_secondaries = "no_unused_secondaries",
+            unset = "no_unset",
             unused_globals = "no_unused_globals"} do
          if args[argname] then
             res[optname] = not args[argname]

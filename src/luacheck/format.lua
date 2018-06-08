@@ -4,7 +4,8 @@ local warnings = {
          global = "accessing undefined variable %s"
       },
       set = {
-         global = "setting non-standard global variable %s"
+         global = "setting non-standard global variable %s",
+         module = "setting non-module global variable %s"
       },
       unused = {
          global = "unused global variable %s"
@@ -28,6 +29,9 @@ local warnings = {
          var = "value assigned to variable %s is unused",
          arg = "value of argument %s is unused",
          loop = "value of loop variable %s is unused"
+      },
+      unset = {
+         var = "variable %s is never set"
       }
    }
 }
