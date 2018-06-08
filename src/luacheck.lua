@@ -8,6 +8,7 @@ local get_report = require "luacheck.get_report"
 -- `options.check_unused` - should luacheck check for unused locals? Default: true. 
 -- `options.check_unused_args` - should luacheck check for unused arguments and iterator variables? Default: true. 
 -- `options.globals` - set of standard globals. Default: _G. 
+-- `options.env_aware` - ignore globals is chunks with custom _ENV. Default: true. 
 -- `options.ignore` - set of variables to ignore. Default: empty. Takes precedense over `options.only`. 
 -- `options.only` - set of variables to report. Default: report all. 
 -- 
@@ -29,6 +30,9 @@ local get_report = require "luacheck.get_report"
 -- `name` field contains the name of problematic variable. 
 -- `line` field contains line number where the problem occured. 
 -- `column` field contains offest of the name in that line. 
+-- For warnings of type `redefined`, there are two additional fields: 
+-- `prev_line` field contains line number where the variable was previously defined. 
+-- `prev_column` field contains offest of the variable name in that line. 
 --
 -- The global report contains global counter of warnings per type in its `global`, `redefined` and `unused` fields. 
 -- `total` field contains total number of warnings in all files. 

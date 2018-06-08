@@ -52,6 +52,56 @@ foo()
       ]], {globals = {foo = true}}))
    end)
 
+   it("is _ENV-aware", function()
+      assert.same({total = 0, global = 0, redefined = 0, unused = 0}, get_report[[
+print(_ENV)
+
+local _ENV = {}
+do
+   x = 4
+end
+      ]])
+   end)
+
+   it("can detect unused _ENV", function()
+      assert.same({total = 1, global = 0, redefined = 0, unused = 1, 
+         {type = "unused", subtype = "var", name = "_ENV", line = 3, column = 7}
+      }, get_report[[
+print(_ENV)
+
+local _ENV = {}
+do
+   -- something
+end
+      ]])
+   end)
+
+   it("correctly checks if _ENV is unused with check_global == false", function()
+      assert.same({total = 0, global = 0, redefined = 0, unused = 0}, get_report([[
+print(_ENV)
+
+local _ENV = {}
+do
+   x = 4
+end
+      ]], {check_global = false}))
+   end)
+
+   it("can be not _ENV-aware", function()
+      assert.same({total = 3, global = 2, redefined = 0, unused = 1, 
+         {type = "global", subtype = "read", name = "_ENV", line = 1, column = 7},
+         {type = "unused", subtype = "var", name = "_ENV", line = 3, column = 7},
+         {type = "global", subtype = "write", name = "x", line = 5, column = 4}
+      }, get_report([[
+print(_ENV)
+
+local _ENV = {}
+do
+   x = 4
+end
+      ]], {env_aware = false}))
+   end)
+
    it("detects unused locals", function()
       assert.same({total = 1, global = 0, redefined = 0, unused = 1, 
          {type = "unused", subtype = "var", name = "a", line = 1, column = 7}
@@ -124,8 +174,9 @@ end
    end)
 
    it("detects redefinition in the same scope", function()
-      assert.same({total = 1, global = 0, redefined = 1, unused = 0,
-         {type = "redefined", subtype = "var", name = "foo", line = 2, column = 7}
+      assert.same({total = 2, global = 0, redefined = 1, unused = 1,
+         {type = "unused", subtype = "var", name = "foo", line = 1, column = 7},
+         {type = "redefined", subtype = "var", name = "foo", line = 2, column = 7, prev_line = 1, prev_column = 7}
       }, get_report[[
 local foo
 local foo = "bar"
@@ -134,8 +185,9 @@ print(foo)
    end)
 
    it("detects redefinition of function arguments", function()
-      assert.same({total = 1, global = 0, redefined = 1, unused = 0,
-         {type = "redefined", subtype = "arg", name = "foo", line = 2, column = 10}
+      assert.same({total = 2, global = 0, redefined = 1, unused = 1,
+         {type = "unused", subtype = "arg", name = "foo", line = 1, column = 17},
+         {type = "redefined", subtype = "arg", name = "foo", line = 2, column = 10, prev_line = 1, prev_column = 17}
       }, get_report[[
 return function(foo, ...)
    local foo

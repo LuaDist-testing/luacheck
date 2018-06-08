@@ -11,6 +11,7 @@ local function check(ast, options)
       check_unused = true,
       check_unused_args = true,
       globals = _G,
+      env_aware = true,
       ignore = {},
       only = false
    }
@@ -30,8 +31,8 @@ local function check(ast, options)
    -- Current scope nesting level. 
    local level = 0
 
-   -- adds a warning, if necessary. 
-   local function add_warning(node, type_, subtype)
+   -- Adds a warning, if necessary. 
+   local function add_warning(node, type_, subtype, prev_node)
       local name = node[1]
 
       if not opts.ignore[name] then
@@ -43,14 +44,36 @@ local function check(ast, options)
                subtype = subtype,
                name = name,
                line = node.lineinfo.first.line,
-               column = node.lineinfo.first.column
+               column = node.lineinfo.first.column,
+               prev_line = prev_node and prev_node.lineinfo.first.line,
+               prev_column = prev_node and prev_node.lineinfo.first.column
             }
+         end
+      end
+   end
+
+   -- resolve name in current scope. 
+   -- If variable is found, mark it as accessed and return true. 
+   local function find_and_access(name)
+      for i=level, 1, -1 do
+         if scopes[i][name] then
+            scopes[i][name][2] = true
+            return true
          end
       end
    end
 
    local function get_subtype(vardata)
       return vardata[3] and (vardata[4] and "loop" or "arg") or "var"
+   end
+
+   -- If the variable was unused, adds a warning. 
+   local function check_usage(vardata)
+      if vardata[1][1] ~= "_" and not vardata[2] then
+         if not vardata[3] or opts.check_unused_args then
+            add_warning(vardata[1], "unused", get_subtype(vardata))
+         end
+      end
    end
 
    function callbacks.on_start(_)
@@ -63,12 +86,8 @@ local function check(ast, options)
    function callbacks.on_end(_)
       if opts.check_unused then
          -- Check if some local variables in this scope were left unused. 
-         for name, vardata in pairs(scopes[level]) do
-            if name ~= "_" and not vardata[2] then
-               if not vardata[3] or opts.check_unused_args then
-                  add_warning(vardata[1], "unused", get_subtype(vardata))
-               end
-            end
+         for _, vardata in pairs(scopes[level]) do
+            check_usage(vardata)
          end
       end
 
@@ -80,8 +99,11 @@ local function check(ast, options)
    function callbacks.on_local(node, is_arg, is_loop)
       if opts.check_redefined then
          -- Check if this variable was declared already in this scope. 
-         if scopes[level][node[1]] then
-            add_warning(node, "redefined", get_subtype(scopes[level][node[1]]))
+         local prev_vardata = scopes[level][node[1]]
+
+         if prev_vardata then
+            check_usage(prev_vardata)
+            add_warning(node, "redefined", get_subtype(prev_vardata), prev_vardata[1])
          end
       end
 
@@ -92,19 +114,11 @@ local function check(ast, options)
    function callbacks.on_access(node, is_set)
       local name = node[1]
 
-      -- Check if there is a local with this name. 
-      for i=level, 1, -1 do
-         if scopes[i][name] then
-            scopes[i][name][2] = true
-            return
-         end
-      end
-
-      if opts.check_global then
-         -- If we are here, the variable is not local. 
-         -- Report if it is not standard. 
-         if not opts.globals[name] then
-            add_warning(node, "global", is_set and "write" or "read")
+      if not find_and_access(name) then
+         if not opts.env_aware or name ~= "_ENV" and not find_and_access("_ENV") then
+            if opts.check_global and opts.globals[name] == nil then
+               add_warning(node, "global", is_set and "write" or "read")
+            end
          end
       end
    end
