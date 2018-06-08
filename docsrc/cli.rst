@@ -41,9 +41,10 @@ The output of ``luacheck`` consists of separate reports for each checked file an
 ``luacheck`` chooses exit code as follows:
 
 * Exit code is ``0`` if no warnings or errors occurred.
-* Exit code is ``1`` if some warnings or syntax errors occured.
-* Exit code is ``2`` if some files couldn't be checked, typically due to an incorrect file name.
-* Exit code is ``3`` if there was a critical error (invalid CLI arguments, config, or cache file).
+* Exit code is ``1`` if some warnings occured but there were no syntax errors or invalid inline options.
+* Exit code is ``2`` if there were some syntax errors or invalid inline options.
+* Exit code is ``3`` if some files couldn't be checked, typically due to an incorrect file name.
+* Exit code is ``4`` if there was a critical error (invalid CLI arguments, config, or cache file).
 
 .. _cliopts:
 
@@ -73,14 +74,15 @@ Option                                  Meaning
                                         * ``lua51c`` - globals of Lua 5.1;
                                         * ``lua52`` - globals of Lua 5.2;
                                         * ``lua52c`` - globals of Lua 5.2 compiled with LUA_COMPAT_ALL;
-                                        * ``lua53`` - globals of Lua 5.3; 
-                                        * ``lua53c`` - globals of Lua 5.3 compiled with LUA_COMPAT_5_2; 
+                                        * ``lua53`` - globals of Lua 5.3;
+                                        * ``lua53c`` - globals of Lua 5.3 compiled with LUA_COMPAT_5_2;
                                         * ``luajit`` - globals of LuaJIT 2.0;
                                         * ``ngx_lua`` - globals of Openresty `lua-nginx-module <https://github.com/openresty/lua-nginx-module>`_ with LuaJIT 2.0;
                                         * ``min`` - intersection of globals of Lua 5.1, Lua 5.2, Lua 5.3 and LuaJIT 2.0;
                                         * ``max`` - union of globals of Lua 5.1, Lua 5.2, Lua 5.3 and LuaJIT 2.0;
                                         * ``_G``  (default) - same as ``lua51c``, ``lua52c``, ``lua53c``, or ``luajit`` depending on version of Lua used
                                           to run ``luacheck`` or same as ``max`` if couldn't detect the version;
+                                        * ``love`` - globals added by `LÖVE <https://love2d.org>`_ (love2d);
                                         * ``busted`` - globals added by Busted 2.0;
                                         * ``rockspec`` - globals allowed in rockspecs;
                                         * ``none`` - no standard globals.
@@ -103,12 +105,26 @@ Option                                  Meaning
                                         See :ref:`modules`
 ``--max-line-length <length``           Set maximum allowed line length (default: 120).
 ``--no-max-line-length``                Do not limit line length.
+``--max-code-line-length <length``      Set maximum allowed length for lines ending with code (default: 120).
+``--no-max-code-line-length``           Do not limit code line length.
+``--max-string-line-length <length``    Set maximum allowed length for lines within a string (default: 120).
+``--no-max-string-line-length``         Do not limit string line length.
+``--max-comment-line-length <length``   Set maximum allowed length for comment lines (default: 120).
+``--no-max-comment-line-length``        Do not limit comment line length.
 ``--ignore | -i <patt> [<patt>] ...``   Filter out warnings matching patterns.
 ``--enable | -e <patt> [<patt>] ...``   Do not filter out warnings matching patterns.
 ``--only | -o <patt> [<patt>] ...``     Filter out warnings not matching patterns.
 ``--no-inline``                         Disable inline options.
 ``--config <config>``                   Path to custom configuration file (default: ``.luacheckrc``).
 ``--no-config``                         Do not look up custom configuration file.
+``--default-config <config>``           Default path to custom configuration file, to be used if ``--[no-]config`` is not used and ``.luacheckrc`` is not found.
+
+                                        Default global location is:
+
+                                        * ``%LOCALAPPDATA%\Luacheck\.luacheckrc`` on Windows;
+                                        * ``~/Library/Application Support/Luacheck/.luacheckrc`` on OS X/macOS;
+                                        * ``$XDG_CONFIG_HOME/luacheck/.luacheckrc`` or ``~/.config/luacheck/.luacheckrc`` on other systems.
+``--no-default-config``                 Do not use fallback configuration file.
 ``--filename <filename>``               Use another filename in output, for selecting
                                         configuration overrides and for file filtering.
 ``--exclude-files <glob> [<glob>] ...`` Do not check files matching these globbing patterns. Recursive globs such as ``**/*.lua`` are supported.

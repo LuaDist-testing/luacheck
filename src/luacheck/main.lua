@@ -12,9 +12,17 @@ local fs = require "luacheck.fs"
 local globbing = require "luacheck.globbing"
 local utils = require "luacheck.utils"
 
+local exit_codes = {
+   ok = 0,
+   warnings = 1,
+   errors = 2,
+   fatals = 3,
+   critical = 4
+}
+
 local function critical(msg)
    io.stderr:write("Critical error: "..msg.."\n")
-   os.exit(3)
+   os.exit(exit_codes.critical)
 end
 
 local function main()
@@ -76,6 +84,7 @@ together with used ones.]]):target("unused_secondaries"):action("store_false")
       depending on version of Lua used to run luacheck
       or same as max if couldn't detect the version.
       Currently %s;
+   love - globals added by LOVE (love2d);
    busted - globals added by Busted 2.0;
    rockspec - globals allowed in rockspecs;
    none - no standard globals.
@@ -128,6 +137,30 @@ their files.]])
          :action "store_false"
          :target "max_line_length"
 
+      parser:option("--max-code-line-length", [[Set maximum allowed length for lines
+ending with code (default: 120).]])
+         :argname "<length>"
+         :convert(tonumber)
+      parser:flag("--no-max-code-line-length", "Do not limit code line length.")
+         :action "store_false"
+         :target "max_code_line_length"
+
+      parser:option("--max-string-line-length", [[Set maximum allowed length for lines
+within a string (default: 120).]])
+         :argname "<length>"
+         :convert(tonumber)
+      parser:flag("--no-max-string-line-length", "Do not limit string line length.")
+         :action "store_false"
+         :target "max_string_line_length"
+
+      parser:option("--max-comment-line-length", [[Set maximum allowed length for
+comment lines (default: 120).]])
+         :argname "<length>"
+         :convert(tonumber)
+      parser:flag("--no-max-comment-line-length", "Do not limit comment line length.")
+         :action "store_false"
+         :target "max_comment_line_length"
+
       parser:option("--ignore -i", [[Filter out warnings matching these patterns.
 If a pattern contains slash, part before slash matches
 warning code and part after it matches name of related
@@ -157,6 +190,19 @@ Otherwise, the pattern matches warning code.]])
       parser:mutex(
          parser:option("--config", "Path to configuration file. (default: "..config.default_path..")"),
          parser:flag("--no-config", "Do not look up configuration file.")
+      )
+
+      local default_global_path = config.get_default_global_path()
+
+      parser:mutex(
+         parser:option("--default-config", ([[
+Path to configuration file to use if
+--[no-]config is not used and
+project-specific %s is not found.
+(default: %s)]]):format(config.default_path, default_global_path or "could not detect"))
+            :default(default_global_path)
+            :show_default(false),
+         parser:flag("--no-default-config", "Do not use default configuration file.")
       )
 
       parser:option("--filename", [[Use another filename in output and for selecting
@@ -208,7 +254,7 @@ patterns.]])
       parser:flag("--no-color", "Do not color output.")
 
       parser:flag("-v --version", "Show version info and exit.")
-         :action(function() print(version.string) os.exit(0) end)
+         :action(function() print(version.string) os.exit(exit_codes.ok) end)
 
       return parser
    end
@@ -258,14 +304,18 @@ patterns.]])
          if file == "-" then
             add(io.stdin)
          elseif fs.is_dir(file) then
-            local extracted, err = fs.extract_files(file, dir_pattern)
+            if fs.has_lfs then
+               local extracted, err = fs.extract_files(file, dir_pattern)
 
-            if extracted then
-               for _, nested_file in ipairs(extracted) do
-                  add(nested_file)
+               if extracted then
+                  for _, nested_file in ipairs(extracted) do
+                     add(nested_file)
+                  end
+               elseif add(file) then
+                  bad_files[#res] = {fatal = "I/O", msg = err}
                end
             elseif add(file) then
-               bad_files[#res] = {fatal = "I/O", msg = err}
+               bad_files[#res] = {fatal = "I/O", msg = "LuaFileSystem required to check directories"}
             end
          elseif file:sub(-#".rockspec") == ".rockspec" then
             local related_files, err, msg = expand_rockspec(file)
@@ -351,7 +401,7 @@ patterns.]])
       for i, file in ipairs(files) do
          if not bad_files[i] and file ~= io.stdin then
             table.insert(cache_files, file)
-            local mtime = fs.mtime(file)
+            local mtime = fs.get_mtime(file)
             table.insert(cache_mtimes, mtime)
             sparse_mtimes[i] = mtime
          end
@@ -516,7 +566,7 @@ patterns.]])
    local ok, args = parser:pparse()
    if not ok then
       io.stderr:write(("%s\n\nError: %s\n"):format(parser:get_usage(), args))
-      os.exit(3)
+      os.exit(exit_codes.critical)
    end
 
    local conf
@@ -525,7 +575,7 @@ patterns.]])
       conf = config.empty_config
    else
       local err
-      conf, err = config.load_config(args.config)
+      conf, err = config.load_config(args.config, not args.no_default_config and args.default_config)
 
       if not conf then
          critical(err)
@@ -550,17 +600,15 @@ patterns.]])
 
    io.stdout:write(output)
 
-   local exit_code
-
    if report.fatals > 0 then
-      exit_code = 2
-   elseif report.warnings > 0 or report.errors > 0 then
-      exit_code = 1
+      os.exit(exit_codes.fatals)
+   elseif report.errors > 0 then
+      os.exit(exit_codes.errors)
+   elseif report.warnings > 0 then
+      os.exit(exit_codes.warnings)
    else
-      exit_code = 0
+      os.exit(exit_codes.ok)
    end
-
-   os.exit(exit_code)
 end
 
 local _, error_wrapper = utils.try(main)

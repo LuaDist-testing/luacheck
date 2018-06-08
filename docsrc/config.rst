@@ -3,45 +3,54 @@ Configuration file
 
 ``luacheck`` tries to load configuration from ``.luacheckrc`` file in the current directory. If not found, it will look for it in the parent directory and so on, going up until it reaches file system root. Path to config can be set using ``--config`` option, in which case it will be used during recursive loading. Config loading can be disabled using ``--no-config`` flag.
 
+If neither of ``--config``, ``--no-config``, and ``--no-default-config`` options are used, ``luacheck`` will attempt to load configuration from value of ``--default-config`` option,
+or ``%LOCALAPPDATA%\Luacheck\.luacheckrc`` on Windows, ``~/Library/Application Support/Luacheck/.luacheckrc`` on OS X/macOS, and ``$XDG_CONFIG_HOME/luacheck/.luacheckrc``
+or ``~/.config/luacheck/.luacheckrc`` on other systems by default.
+
 Config is simply a Lua script executed by ``luacheck``. It may set various options by assigning to globals or by returning a table with option names as keys.
+
+Options loaded from config have the lowest priority: it's possible to overwrite them with CLI options or inline options.
 
 .. _options:
 
 Config options
 --------------
 
-====================== ======================================== ===================
-Option                 Type                                     Default value
-====================== ======================================== ===================
-``color``              Boolean                                  ``true``
-``codes``              Boolean                                  ``false``
-``formatter``          String or function                       ``"default"``
-``cache``              Boolean or string                        ``false``
-``jobs``               Positive integer                         ``1``
-``exclude_files``      Array of strings                         ``{}``
-``include_files``      Array of strings                         (Include all files)
-``global``             Boolean                                  ``true``
-``unused``             Boolean                                  ``true``
-``redefined``          Boolean                                  ``true``
-``unused_args``        Boolean                                  ``true``
-``unused_secondaries`` Boolean                                  ``true``
-``self``               Boolean                                  ``true``
-``std``                String or set of standard globals        ``"_G"``
-``globals``            Array of strings or field definition map ``{}``
-``new_globals``        Array of strings or field definition map (Do not overwrite)
-``read_globals``       Array of strings or field definition map ``{}``
-``new_read_globals``   Array of strings or field definition map (Do not overwrite)
-``not_globals``        Array of strings                         ``{}``
-``compat``             Boolean                                  ``false``
-``allow_defined``      Boolean                                  ``false``
-``allow_defined_top``  Boolean                                  ``false``
-``module``             Boolean                                  ``false``
-``max_line_length``    Number or ``false``                      ``120``
-``ignore``             Array of patterns (see :ref:`patterns`)  ``{}``
-``enable``             Array of patterns                        ``{}``
-``only``               Array of patterns                        (Do not filter)
-``inline``             Boolean                                  ``true``
-====================== ======================================== ===================
+=========================== ======================================== ===================
+Option                      Type                                     Default value
+=========================== ======================================== ===================
+``color``                   Boolean                                  ``true``
+``codes``                   Boolean                                  ``false``
+``formatter``               String or function                       ``"default"``
+``cache``                   Boolean or string                        ``false``
+``jobs``                    Positive integer                         ``1``
+``exclude_files``           Array of strings                         ``{}``
+``include_files``           Array of strings                         (Include all files)
+``global``                  Boolean                                  ``true``
+``unused``                  Boolean                                  ``true``
+``redefined``               Boolean                                  ``true``
+``unused_args``             Boolean                                  ``true``
+``unused_secondaries``      Boolean                                  ``true``
+``self``                    Boolean                                  ``true``
+``std``                     String or set of standard globals        ``"_G"``
+``globals``                 Array of strings or field definition map ``{}``
+``new_globals``             Array of strings or field definition map (Do not overwrite)
+``read_globals``            Array of strings or field definition map ``{}``
+``new_read_globals``        Array of strings or field definition map (Do not overwrite)
+``not_globals``             Array of strings                         ``{}``
+``compat``                  Boolean                                  ``false``
+``allow_defined``           Boolean                                  ``false``
+``allow_defined_top``       Boolean                                  ``false``
+``module``                  Boolean                                  ``false``
+``max_line_length``         Number or ``false``                      ``120``
+``max_code_line_length``    Number or ``false``                      ``120``
+``max_string_line_length``  Number or ``false``                      ``120``
+``max_comment_line_length`` Number or ``false``                      ``120``
+``ignore``                  Array of patterns (see :ref:`patterns`)  ``{}``
+``enable``                  Array of patterns                        ``{}``
+``only``                    Array of patterns                        (Do not filter)
+``inline``                  Boolean                                  ``true``
+=========================== ======================================== ===================
 
 An example of a config which makes ``luacheck`` ensure that only globals from the portable intersection of Lua 5.1, Lua 5.2, Lua 5.3 and LuaJIT 2.0 are used, as well as disables detection of unused arguments:
 
