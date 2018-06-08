@@ -562,8 +562,8 @@ describe("filter", function()
             {code = "111", name = "not_print", indexing = {"not_print"}, line = 1, column = 1},
             {code = "111", name = "print", indexing = {"print"}, line = 5, column = 1},
             {code = "121", name = "print", indexing = {"print"}, line = 7, column = 1},
-            {code = "021", line = 8, column = 1},
-            {code = "021", line = 1000, column = 20}
+            {code = "021", msg = "invalid value of inline option 'std'", line = 8, column = 1},
+            {code = "021", msg = "invalid value of inline option 'std'", line = 1000, column = 20}
          }
       }, filter_full({
          {
@@ -637,8 +637,8 @@ describe("filter", function()
    it("adds line length warnings", function()
       assert.same({
          {
-            {code = "631", line = 2, column = 1, end_column = 121, max_length = 120},
-            {code = "631", line = 5, column = 1, end_column = 18, line_ending = "string", max_length = 15}
+            {code = "631", line = 2, column = 121, end_column = 121, max_length = 120},
+            {code = "631", line = 5, column = 16, end_column = 18, line_ending = "string", max_length = 15}
          }
       }, filter_full({
          {
